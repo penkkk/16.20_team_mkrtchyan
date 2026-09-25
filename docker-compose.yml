@@ -1,14 +1,41 @@
 services:
-  db:
+  postgres:
     image: postgres:18-alpine
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-opd}
+      POSTGRES_USER: ${POSTGRES_USER:-opd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opd}
     volumes:
-      - pgdata:/var/lib/postgresql
+      - postgres18_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opd} -d ${POSTGRES_DB:-opd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+  
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: opd-library:latest
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    env_file:
+      - .env
+      - ./backend/.env
+    environment:
+      APP_PORT: ${APP_PORT:-8080}
+      DATABASE_URL: postgres://${POSTGRES_USER:-opd}:${POSTGRES_PASSWORD:-opd}@postgres:5432/${POSTGRES_DB:-opd}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ISSUER: ${JWT_ISSUER:-opd-library}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-opd-api}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:
@@ -17,4 +44,4 @@ services:
       - "3000:80"
 
 volumes:
-  pgdata:
+  postgres18_data:

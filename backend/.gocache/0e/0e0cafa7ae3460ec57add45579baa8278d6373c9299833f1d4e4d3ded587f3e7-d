@@ -1,0 +1,3 @@
+./auth_queries.sql.go
+./db.go
+./models.go

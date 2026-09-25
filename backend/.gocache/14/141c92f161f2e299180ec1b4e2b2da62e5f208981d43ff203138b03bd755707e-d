@@ -1,0 +1,5 @@
+./auth.go
+./dto.go
+./errors.go
+./models.go
+./service.go
