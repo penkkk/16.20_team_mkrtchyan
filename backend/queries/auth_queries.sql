@@ -90,3 +90,19 @@ JOIN auth.user_passwords AS up ON up.user_id = u.id
 WHERE u.username = $1
    OR LOWER(u.email) = LOWER($1::text)
 LIMIT 1;
+
+-- name: FindUserConflicts :many
+SELECT field
+FROM (
+  SELECT 1 AS priority, 'username' AS field
+  WHERE EXISTS (SELECT 1 FROM auth.users AS u WHERE u.username = sqlc.arg(username))
+  UNION ALL
+  SELECT 2 AS priority, 'email' AS field
+  WHERE EXISTS (SELECT 1 FROM auth.users AS u WHERE LOWER(u.email) = LOWER(sqlc.arg(email)::text))
+  UNION ALL
+  SELECT 3 AS priority, 'tg_username' AS field
+  WHERE sqlc.narg(tg_username)::text IS NOT NULL
+    AND EXISTS (SELECT 1 FROM auth.users AS u WHERE u.tg_username = sqlc.narg(tg_username))
+) AS conflicts
+ORDER BY priority
+;

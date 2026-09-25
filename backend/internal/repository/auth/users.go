@@ -7,10 +7,13 @@ import (
 	"opd/internal/db"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (r *PostgresRepository) CreateUser(ctx context.Context, input CreateUserInput) (User, error) {
+const uniqueViolationCode = "23505"
+
+func (r *AuthPostgresRepository) CreateUser(ctx context.Context, input CreateUserInput) (User, error) {
 	user, err := r.queries.CreateUser(ctx, db.CreateUserParams{
 		Username:   input.Username,
 		Email:      input.Email,
@@ -19,13 +22,17 @@ func (r *PostgresRepository) CreateUser(ctx context.Context, input CreateUserInp
 		Surname:    textFromString(input.Surname),
 	})
 	if err != nil {
+		if fields := userUniqueConstraintFields(err); len(fields) > 0 {
+			return User{}, NewUniqueConstraintError(fields...)
+		}
+
 		return User{}, err
 	}
 
 	return userFromDB(user), nil
 }
 
-func (r *PostgresRepository) CreateUserPassword(ctx context.Context, input CreateUserPasswordInput) (UserPassword, error) {
+func (r *AuthPostgresRepository) CreateUserPassword(ctx context.Context, input CreateUserPasswordInput) (UserPassword, error) {
 	userID, err := uuidFromString(input.UserID)
 	if err != nil {
 		return UserPassword{}, err
@@ -42,7 +49,7 @@ func (r *PostgresRepository) CreateUserPassword(ctx context.Context, input Creat
 	return userPasswordFromDB(password), nil
 }
 
-func (r *PostgresRepository) GetUserCredentialsByLogin(ctx context.Context, login string) (UserCredentials, error) {
+func (r *AuthPostgresRepository) GetUserCredentialsByLogin(ctx context.Context, login string) (UserCredentials, error) {
 	credentials, err := r.queries.GetUserCredentialsByLogin(ctx, login)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -53,6 +60,32 @@ func (r *PostgresRepository) GetUserCredentialsByLogin(ctx context.Context, logi
 	}
 
 	return userCredentialsFromDB(credentials), nil
+}
+
+func (r *AuthPostgresRepository) FindUserConflicts(ctx context.Context, input FindUserConflictsInput) ([]string, error) {
+	return r.queries.FindUserConflicts(ctx, db.FindUserConflictsParams{
+		Username:   input.Username,
+		Email:      input.Email,
+		TgUsername: textFromStringPtr(input.TgUsername),
+	})
+}
+
+func userUniqueConstraintFields(err error) []string {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != uniqueViolationCode {
+		return nil
+	}
+
+	switch pgErr.ConstraintName {
+	case "users_username_key":
+		return []string{"username"}
+	case "users_email_key", "users_email_lower_uidx":
+		return []string{"email"}
+	case "users_tg_username_key":
+		return []string{"tg_username"}
+	default:
+		return nil
+	}
 }
 
 func userFromDB(user db.AuthUser) User {

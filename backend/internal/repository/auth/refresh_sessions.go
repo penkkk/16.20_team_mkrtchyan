@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (r *PostgresRepository) CreateRefreshSession(ctx context.Context, input CreateRefreshSessionInput) (RefreshSession, error) {
+func (r *AuthPostgresRepository) CreateRefreshSession(ctx context.Context, input CreateRefreshSessionInput) (RefreshSession, error) {
 	userID, err := uuidFromString(input.UserID)
 	if err != nil {
 		return RefreshSession{}, err
@@ -29,7 +29,7 @@ func (r *PostgresRepository) CreateRefreshSession(ctx context.Context, input Cre
 	return refreshSessionFromDB(session), nil
 }
 
-func (r *PostgresRepository) RevokeRefreshSession(ctx context.Context, tokenHash string) (RefreshSession, error) {
+func (r *AuthPostgresRepository) RevokeRefreshSession(ctx context.Context, tokenHash string) (RefreshSession, error) {
 	session, err := r.queries.RevokeRefreshSession(ctx, tokenHash)
 	if err != nil {
 		return RefreshSession{}, err

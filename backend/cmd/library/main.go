@@ -38,7 +38,7 @@ func main() {
 	}
 
 	tokenManager := token.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, 15*time.Minute)
-	repositories := repository.NewRepositories(db)
+	repositories := repository.NewRepositoriesWithTxManager(db)
 	services := service.NewServices(repositories, tokenManager)
 	authHandler := authhandler.NewHandler(services.Auth)
 
