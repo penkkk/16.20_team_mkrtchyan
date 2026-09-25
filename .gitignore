@@ -1,0 +1,23 @@
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.env
+
+# Go
+backend/bin/
+backend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Bun / Node
+node_modules/
+dist/
+build/
+.bun/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
