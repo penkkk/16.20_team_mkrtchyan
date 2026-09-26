@@ -62,17 +62,12 @@ RETURNING
 -- name: RevokeRefreshSession :one
 UPDATE auth.refresh_sessions
 SET revoked_at = NOW()
-WHERE token_hash = $1
+WHERE token_hash = sqlc.arg(token_hash)
   AND revoked_at IS NULL
+  AND expires_at > NOW()
 RETURNING
-    id,
     user_id,
-    token_hash,
-    user_agent,
-    ip,
-    expires_at,
-    revoked_at,
-    created_at;
+    user_agent;
 
 -- name: GetUserCredentialsByLogin :one
 SELECT

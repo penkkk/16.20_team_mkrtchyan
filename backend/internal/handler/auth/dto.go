@@ -22,6 +22,13 @@ type LoginResponse struct {
 	User             UserResponse `json:"user"`
 }
 
+type RefreshResponse struct {
+	AccessToken      string `json:"accessToken"`
+	TokenType        string `json:"tokenType"`
+	ExpiresIn        int    `json:"expiresIn"`
+	RefreshExpiresIn int    `json:"refreshExpiresIn"`
+}
+
 type UserResponse struct {
 	ID         string `json:"id"`
 	Username   string `json:"username"`

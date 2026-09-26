@@ -10,8 +10,8 @@ import (
 )
 
 type Manager interface {
-	IssueToken(userID string) (string, error)
-	IssueTokenPair(userID string) (TokenPair, error)
+	IssueToken(userID string, userAgent string) (string, error)
+	IssueTokenPair(userID string, userAgent string) (TokenPair, error)
 	VerifyAccessToken(tokenString string) (Claims, error)
 }
 
@@ -21,7 +21,14 @@ type TokenPair struct {
 }
 
 type Claims struct {
-	UserID string
+	UserID    string
+	UserAgent string
+}
+
+type accessTokenClaims struct {
+	UserAgent string `json:"user_agent,omitempty"`
+
+	jwt.RegisteredClaims
 }
 
 type JWTManager struct {
@@ -40,22 +47,25 @@ func NewJWTManager(secret, issuer, audience string, accessTTL time.Duration) *JW
 	}
 }
 
-func (m *JWTManager) IssueToken(userID string) (string, error) {
+func (m *JWTManager) IssueToken(userID string, userAgent string) (string, error) {
 	now := time.Now()
-	claims := jwt.RegisteredClaims{
-		Issuer:    m.issuer,
-		Audience:  jwt.ClaimStrings{m.audience},
-		Subject:   userID,
-		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTTL)),
+	claims := accessTokenClaims{
+		UserAgent: userAgent,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Audience:  jwt.ClaimStrings{m.audience},
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTTL)),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(m.secret))
 }
 
-func (m *JWTManager) IssueTokenPair(userID string) (TokenPair, error) {
-	accessToken, err := m.IssueToken(userID)
+func (m *JWTManager) IssueTokenPair(userID string, userAgent string) (TokenPair, error) {
+	accessToken, err := m.IssueToken(userID, userAgent)
 	if err != nil {
 		return TokenPair{}, err
 	}
@@ -72,7 +82,7 @@ func (m *JWTManager) IssueTokenPair(userID string) (TokenPair, error) {
 }
 
 func (m *JWTManager) VerifyAccessToken(tokenString string) (Claims, error) {
-	claims := jwt.RegisteredClaims{}
+	claims := accessTokenClaims{}
 
 	parsedToken, err := jwt.ParseWithClaims(
 		tokenString,
@@ -96,7 +106,8 @@ func (m *JWTManager) VerifyAccessToken(tokenString string) (Claims, error) {
 	}
 
 	return Claims{
-		UserID: claims.Subject,
+		UserID:    claims.Subject,
+		UserAgent: claims.UserAgent,
 	}, nil
 }
 

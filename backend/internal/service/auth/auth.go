@@ -34,7 +34,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (LoginResult,
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	tokenPair, err := s.tokens.IssueTokenPair(credentials.User.ID)
+	tokenPair, err := s.tokens.IssueTokenPair(credentials.User.ID, input.UserAgent)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -43,6 +43,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (LoginResult,
 	_, err = s.repo.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
 		UserID:    credentials.User.ID,
 		TokenHash: refreshTokenHash,
+		UserAgent: stringPtrFromString(input.UserAgent),
 		ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
 	})
 	if err != nil {
@@ -100,7 +101,7 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (LoginR
 			return err
 		}
 
-		tokenPair, err := s.tokens.IssueTokenPair(user.ID)
+		tokenPair, err := s.tokens.IssueTokenPair(user.ID, input.UserAgent)
 		if err != nil {
 			return err
 		}
@@ -109,6 +110,7 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (LoginR
 		_, err = repositories.Auth.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
 			UserID:    user.ID,
 			TokenHash: refreshTokenHash,
+			UserAgent: stringPtrFromString(input.UserAgent),
 			ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
 		})
 		if err != nil {
@@ -138,6 +140,69 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (LoginR
 	return result, nil
 }
 
+func (s *authService) Logout(ctx context.Context, input LogoutInput) error {
+	// add access-token blacklist
+	refreshTokenHash := hashRefreshToken(input.RefreshSession)
+	_, err := s.repo.RevokeRefreshSession(ctx, refreshTokenHash)
+	if err != nil {
+		if errors.Is(err, authrepo.ErrNotFound) {
+			return ErrInvalidRefreshSession
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func (s *authService) Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error) {
+	oldRefreshTokenHash := hashRefreshToken(input.RefreshSession)
+	var result RefreshResult
+	err := s.txManager.WithinTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.ReadCommitted,
+	}, func(repositories *repository.Repositories) error {
+		oldSession, err := repositories.Auth.RevokeRefreshSession(ctx, oldRefreshTokenHash)
+		if err != nil {
+			if errors.Is(err, authrepo.ErrNotFound) {
+				return ErrInvalidRefreshSession
+			}
+
+			return err
+		}
+
+		tokenPair, err := s.tokens.IssueTokenPair(oldSession.UserID, oldSession.UserAgent)
+		if err != nil {
+			return err
+		}
+
+		newRefreshTokenHash := hashRefreshToken(tokenPair.RefreshToken)
+		refreshSession := authrepo.CreateRefreshSessionInput{
+			UserID:    oldSession.UserID,
+			UserAgent: stringPtrFromString(oldSession.UserAgent),
+			TokenHash: newRefreshTokenHash,
+			IP:        nil,
+			ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
+		}
+
+		_, err = repositories.Auth.CreateRefreshSession(ctx, refreshSession)
+		if err != nil {
+			return err
+		}
+		result = RefreshResult{
+			AccessToken:      tokenPair.AccessToken,
+			RefreshToken:     tokenPair.RefreshToken,
+			TokenType:        "Bearer",
+			ExpiresIn:        accessTokenTTLSeconds,
+			RefreshExpiresIn: refreshTokenTTLSeconds,
+		}
+		return nil
+	})
+	if err != nil {
+		return RefreshResult{}, err
+	}
+	return result, nil
+}
+
 func userFromRepository(user authrepo.User) User {
 	return User{
 		ID:         user.ID,
@@ -152,4 +217,12 @@ func userFromRepository(user authrepo.User) User {
 func hashRefreshToken(refreshToken string) string {
 	hash := sha256.Sum256([]byte(refreshToken))
 	return hex.EncodeToString(hash[:refreshTokenHashByteLength])
+}
+
+func stringPtrFromString(value string) *string {
+	if value == "" {
+		return nil
+	}
+
+	return &value
 }

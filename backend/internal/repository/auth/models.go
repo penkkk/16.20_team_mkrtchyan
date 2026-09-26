@@ -57,6 +57,11 @@ type RefreshSession struct {
 	CreatedAt time.Time
 }
 
+type RevokedRefreshSession struct {
+	UserID    string
+	UserAgent string
+}
+
 type CreateRefreshSessionInput struct {
 	UserID    string
 	TokenHash string

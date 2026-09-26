@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+
 	"opd/internal/repository"
 	authrepo "opd/internal/repository/auth"
 	token "opd/internal/service/token"
@@ -12,6 +13,8 @@ import (
 type AuthService interface {
 	Login(ctx context.Context, input LoginInput) (LoginResult, error)
 	Register(ctx context.Context, input RegisterInput) (LoginResult, error)
+	Logout(ctx context.Context, input LogoutInput) error
+	Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error)
 }
 
 type authRepository interface {
@@ -20,7 +23,7 @@ type authRepository interface {
 	GetUserCredentialsByLogin(ctx context.Context, login string) (authrepo.UserCredentials, error)
 	FindUserConflicts(ctx context.Context, input authrepo.FindUserConflictsInput) ([]string, error)
 	CreateRefreshSession(ctx context.Context, input authrepo.CreateRefreshSessionInput) (authrepo.RefreshSession, error)
-	RevokeRefreshSession(ctx context.Context, tokenHash string) (authrepo.RefreshSession, error)
+	RevokeRefreshSession(ctx context.Context, tokenHash string) (authrepo.RevokedRefreshSession, error)
 }
 
 type authTxManager interface {

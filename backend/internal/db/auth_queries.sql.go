@@ -242,29 +242,23 @@ UPDATE auth.refresh_sessions
 SET revoked_at = NOW()
 WHERE token_hash = $1
   AND revoked_at IS NULL
+  AND expires_at > NOW()
 RETURNING
-    id,
     user_id,
-    token_hash,
-    user_agent,
-    ip,
-    expires_at,
-    revoked_at,
-    created_at
+    user_agent
 `
 
-func (q *Queries) RevokeRefreshSession(ctx context.Context, tokenHash string) (AuthRefreshSession, error) {
+type RevokeRefreshSessionRow struct {
+	UserID    pgtype.UUID
+	UserAgent pgtype.Text
+}
+
+func (q *Queries) RevokeRefreshSession(ctx context.Context, tokenHash string) (RevokeRefreshSessionRow, error) {
 	row := q.db.QueryRow(ctx, revokeRefreshSession, tokenHash)
-	var i AuthRefreshSession
+	var i RevokeRefreshSessionRow
 	err := row.Scan(
-		&i.ID,
 		&i.UserID,
-		&i.TokenHash,
 		&i.UserAgent,
-		&i.Ip,
-		&i.ExpiresAt,
-		&i.RevokedAt,
-		&i.CreatedAt,
 	)
 	return i, err
 }
