@@ -15,11 +15,11 @@ type RegisterRequest struct {
 }
 
 type LoginResponse struct {
+	User             UserResponse `json:"user"`
 	AccessToken      string       `json:"accessToken"`
 	TokenType        string       `json:"tokenType"`
 	ExpiresIn        int          `json:"expiresIn"`
 	RefreshExpiresIn int          `json:"refreshExpiresIn"`
-	User             UserResponse `json:"user"`
 }
 
 type RefreshResponse struct {

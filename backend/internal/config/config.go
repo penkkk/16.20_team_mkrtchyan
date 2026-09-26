@@ -41,8 +41,7 @@ func Load() (Config, error) {
 	}, nil
 }
 
-
-func JWTSecretsCheck(jwtSecret string, jwtIssuer string, jwtAudience string) (error){
+func JWTSecretsCheck(jwtSecret string, jwtIssuer string, jwtAudience string) error {
 	if jwtSecret == "" {
 		return errors.New("JWT_SECRET is required")
 	}
@@ -52,6 +51,6 @@ func JWTSecretsCheck(jwtSecret string, jwtIssuer string, jwtAudience string) (er
 	if jwtAudience == "" {
 		return errors.New("JWT_AUDIENCE is required")
 	}
-	
+
 	return nil
 }

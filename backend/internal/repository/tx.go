@@ -21,7 +21,9 @@ func (m *TxManager) WithinTx(ctx context.Context, opts pgx.TxOptions, fn func(*R
 		return err
 	}
 
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	repositories := NewRepositories(tx)
 

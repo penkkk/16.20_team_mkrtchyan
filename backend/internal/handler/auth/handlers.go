@@ -11,13 +11,15 @@ import (
 
 const (
 	refreshTokenCookieName = "refresh_token"
-	refreshTokenCookiePath = "/api/v1/auth"
+	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec
+	errorKey               = "error"
+	internalServerErrorMsg = "internal server error"
 )
 
 func (h *Handler) login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
 		return
 	}
 
@@ -29,9 +31,9 @@ func (h *Handler) login(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidCredentials):
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid login or password"})
+			c.JSON(http.StatusUnauthorized, gin.H{errorKey: "invalid login or password"})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
 		}
 		return
 	}
@@ -44,7 +46,7 @@ func (h *Handler) login(c *gin.Context) {
 func (h *Handler) logout(c *gin.Context) {
 	refreshToken, err := c.Cookie(refreshTokenCookieName)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh session is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "refresh session is required"})
 		return
 	}
 
@@ -55,9 +57,9 @@ func (h *Handler) logout(c *gin.Context) {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidRefreshSession):
 			clearRefreshTokenCookie(c)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh session"})
+			c.JSON(http.StatusUnauthorized, gin.H{errorKey: "invalid refresh session"})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "internal server error"})
 		}
 		return
 	}
@@ -69,7 +71,7 @@ func (h *Handler) logout(c *gin.Context) {
 func (h *Handler) register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
 		return
 	}
 
@@ -88,11 +90,11 @@ func (h *Handler) register(c *gin.Context) {
 		switch {
 		case errors.As(err, &conflictErr):
 			c.JSON(http.StatusConflict, gin.H{
-				"error":  "fields already taken",
+				errorKey: "fields already taken",
 				"fields": conflictFieldsResponse(conflictErr.Fields),
 			})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
 		}
 		return
 	}
@@ -105,7 +107,7 @@ func (h *Handler) register(c *gin.Context) {
 func (h *Handler) refresh(c *gin.Context) {
 	refreshToken, err := c.Cookie(refreshTokenCookieName)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh session is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "refresh session is required"})
 		return
 	}
 
@@ -116,9 +118,9 @@ func (h *Handler) refresh(c *gin.Context) {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidRefreshSession):
 			clearRefreshTokenCookie(c)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh session"})
+			c.JSON(http.StatusUnauthorized, gin.H{errorKey: "invalid refresh session"})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "internal server error"})
 		}
 		return
 	}
