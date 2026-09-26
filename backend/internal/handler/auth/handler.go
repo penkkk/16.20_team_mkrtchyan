@@ -3,10 +3,10 @@ package auth
 import authservice "opd/internal/service/auth"
 
 type Handler struct {
-	service authservice.Service
+	service authservice.AuthService
 }
 
-func NewHandler(service authservice.Service) *Handler {
+func NewHandler(service authservice.AuthService) *Handler {
 	return &Handler{
 		service: service,
 	}

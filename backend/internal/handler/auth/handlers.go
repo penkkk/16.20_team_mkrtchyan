@@ -22,8 +22,9 @@ func (h *Handler) login(c *gin.Context) {
 	}
 
 	result, err := h.service.Login(c.Request.Context(), authservice.LoginInput{
-		Login:    req.Login,
-		Password: req.Password,
+		Login:     req.Login,
+		Password:  req.Password,
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
 		switch {
@@ -35,22 +36,34 @@ func (h *Handler) login(c *gin.Context) {
 		return
 	}
 
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(
-		refreshTokenCookieName,
-		result.RefreshToken,
-		result.RefreshExpiresIn,
-		refreshTokenCookiePath,
-		"",
-		true,
-		true,
-	)
-
+	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
 	c.JSON(http.StatusOK, loginResponseFromService(result))
 }
 
 func (h *Handler) logout(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"message": "logout is not implemented"})
+	refreshToken, err := c.Cookie(refreshTokenCookieName)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh session is required"})
+		return
+	}
+
+	err = h.service.Logout(c.Request.Context(), authservice.LogoutInput{
+		RefreshSession: refreshToken,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, authservice.ErrInvalidRefreshSession):
+			clearRefreshTokenCookie(c)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh session"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	clearRefreshTokenCookie(c)
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) register(c *gin.Context) {
@@ -61,24 +74,58 @@ func (h *Handler) register(c *gin.Context) {
 	}
 
 	tgUsername := optionalStringPtr(req.TgUsername)
-	err := h.service.Register(c.Request.Context(), authservice.RegisterInput{
+	result, err := h.service.Register(c.Request.Context(), authservice.RegisterInput{
 		Name:       req.Name,
 		Password:   req.Password,
 		Surname:    req.Surname,
 		Email:      req.Email,
 		TgUsername: tgUsername,
 		Username:   req.Username,
+		UserAgent:  c.Request.UserAgent(),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		var conflictErr *authservice.FieldConflictError
+		switch {
+		case errors.As(err, &conflictErr):
+			c.JSON(http.StatusConflict, gin.H{
+				"error":  "fields already taken",
+				"fields": conflictFieldsResponse(conflictErr.Fields),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
 		return
 	}
 
-	c.Status(http.StatusCreated)
+	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
+	c.JSON(http.StatusCreated, loginResponseFromService(result))
 }
 
 func (h *Handler) refresh(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"message": "refresh is not implemented"})
+	refreshToken, err := c.Cookie(refreshTokenCookieName)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh session is required"})
+		return
+	}
+
+	result, err := h.service.Refresh(c.Request.Context(), authservice.LogoutInput{
+		RefreshSession: refreshToken,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, authservice.ErrInvalidRefreshSession):
+			clearRefreshTokenCookie(c)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh session"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
+	c.JSON(http.StatusOK, refreshResponseFromService(result))
 }
 
 func loginResponseFromService(result authservice.LoginResult) LoginResponse {
@@ -98,10 +145,58 @@ func loginResponseFromService(result authservice.LoginResult) LoginResponse {
 	}
 }
 
+func refreshResponseFromService(result authservice.RefreshResult) RefreshResponse {
+	return RefreshResponse{
+		AccessToken:      result.AccessToken,
+		TokenType:        result.TokenType,
+		ExpiresIn:        result.ExpiresIn,
+		RefreshExpiresIn: result.RefreshExpiresIn,
+	}
+}
+
+func setAccessTokenHeader(c *gin.Context, tokenType string, accessToken string) {
+	c.Header("Authorization", tokenType+" "+accessToken)
+}
+
+func setRefreshTokenCookie(c *gin.Context, refreshToken string, maxAge int) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		refreshTokenCookieName,
+		refreshToken,
+		maxAge,
+		refreshTokenCookiePath,
+		"",
+		true,
+		true,
+	)
+}
+
+func clearRefreshTokenCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		refreshTokenCookieName,
+		"",
+		-1,
+		refreshTokenCookiePath,
+		"",
+		true,
+		true,
+	)
+}
+
 func optionalStringPtr(value string) *string {
 	if value == "" {
 		return nil
 	}
 
 	return &value
+}
+
+func conflictFieldsResponse(fields []string) map[string]string {
+	response := make(map[string]string, len(fields))
+	for _, field := range fields {
+		response[field] = "already_taken"
+	}
+
+	return response
 }

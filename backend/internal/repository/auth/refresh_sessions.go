@@ -2,14 +2,16 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"opd/internal/db"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (r *PostgresRepository) CreateRefreshSession(ctx context.Context, input CreateRefreshSessionInput) (RefreshSession, error) {
+func (r *AuthPostgresRepository) CreateRefreshSession(ctx context.Context, input CreateRefreshSessionInput) (RefreshSession, error) {
 	userID, err := uuidFromString(input.UserID)
 	if err != nil {
 		return RefreshSession{}, err
@@ -29,13 +31,17 @@ func (r *PostgresRepository) CreateRefreshSession(ctx context.Context, input Cre
 	return refreshSessionFromDB(session), nil
 }
 
-func (r *PostgresRepository) RevokeRefreshSession(ctx context.Context, tokenHash string) (RefreshSession, error) {
+func (r *AuthPostgresRepository) RevokeRefreshSession(ctx context.Context, tokenHash string) (RevokedRefreshSession, error) {
 	session, err := r.queries.RevokeRefreshSession(ctx, tokenHash)
 	if err != nil {
-		return RefreshSession{}, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RevokedRefreshSession{}, ErrNotFound
+		}
+
+		return RevokedRefreshSession{}, err
 	}
 
-	return refreshSessionFromDB(session), nil
+	return revokedRefreshSessionFromDB(session), nil
 }
 
 func refreshSessionFromDB(session db.AuthRefreshSession) RefreshSession {
@@ -48,6 +54,13 @@ func refreshSessionFromDB(session db.AuthRefreshSession) RefreshSession {
 		ExpiresAt: session.ExpiresAt.Time,
 		RevokedAt: timePtrFromTimestamptz(session.RevokedAt),
 		CreatedAt: session.CreatedAt.Time,
+	}
+}
+
+func revokedRefreshSessionFromDB(session db.RevokeRefreshSessionRow) RevokedRefreshSession {
+	return RevokedRefreshSession{
+		UserID:    session.UserID.String(),
+		UserAgent: stringFromText(session.UserAgent),
 	}
 }
 

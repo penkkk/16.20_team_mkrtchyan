@@ -7,7 +7,7 @@ type LoginRequest struct {
 
 type RegisterRequest struct {
 	Username   string `json:"username" binding:"required"`
-	TgUsername string `json:"tgusername"`
+	TgUsername string `json:"tg_username"`
 	Email      string `json:"email" binding:"required,email"`
 	Name       string `json:"name" binding:"required"`
 	Surname    string `json:"surname" binding:"required"`
@@ -20,6 +20,13 @@ type LoginResponse struct {
 	ExpiresIn        int          `json:"expiresIn"`
 	RefreshExpiresIn int          `json:"refreshExpiresIn"`
 	User             UserResponse `json:"user"`
+}
+
+type RefreshResponse struct {
+	AccessToken      string `json:"accessToken"`
+	TokenType        string `json:"tokenType"`
+	ExpiresIn        int    `json:"expiresIn"`
+	RefreshExpiresIn int    `json:"refreshExpiresIn"`
 }
 
 type UserResponse struct {

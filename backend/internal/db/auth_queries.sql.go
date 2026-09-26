@@ -148,6 +148,48 @@ func (q *Queries) CreateUserPassword(ctx context.Context, arg CreateUserPassword
 	return i, err
 }
 
+const findUserConflicts = `-- name: FindUserConflicts :many
+SELECT field
+FROM (
+  SELECT 1 AS priority, 'username' AS field
+  WHERE EXISTS (SELECT 1 FROM auth.users AS u WHERE u.username = $1)
+  UNION ALL
+  SELECT 2 AS priority, 'email' AS field
+  WHERE EXISTS (SELECT 1 FROM auth.users AS u WHERE LOWER(u.email) = LOWER($2::text))
+  UNION ALL
+  SELECT 3 AS priority, 'tg_username' AS field
+  WHERE $3::text IS NOT NULL
+    AND EXISTS (SELECT 1 FROM auth.users AS u WHERE u.tg_username = $3)
+) AS conflicts
+ORDER BY priority
+`
+
+type FindUserConflictsParams struct {
+	Username   string
+	Email      string
+	TgUsername pgtype.Text
+}
+
+func (q *Queries) FindUserConflicts(ctx context.Context, arg FindUserConflictsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, findUserConflicts, arg.Username, arg.Email, arg.TgUsername)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var field string
+		if err := rows.Scan(&field); err != nil {
+			return nil, err
+		}
+		items = append(items, field)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserCredentialsByLogin = `-- name: GetUserCredentialsByLogin :one
 SELECT
     u.id,
@@ -200,29 +242,23 @@ UPDATE auth.refresh_sessions
 SET revoked_at = NOW()
 WHERE token_hash = $1
   AND revoked_at IS NULL
+  AND expires_at > NOW()
 RETURNING
-    id,
     user_id,
-    token_hash,
-    user_agent,
-    ip,
-    expires_at,
-    revoked_at,
-    created_at
+    user_agent
 `
 
-func (q *Queries) RevokeRefreshSession(ctx context.Context, tokenHash string) (AuthRefreshSession, error) {
+type RevokeRefreshSessionRow struct {
+	UserID    pgtype.UUID
+	UserAgent pgtype.Text
+}
+
+func (q *Queries) RevokeRefreshSession(ctx context.Context, tokenHash string) (RevokeRefreshSessionRow, error) {
 	row := q.db.QueryRow(ctx, revokeRefreshSession, tokenHash)
-	var i AuthRefreshSession
+	var i RevokeRefreshSessionRow
 	err := row.Scan(
-		&i.ID,
 		&i.UserID,
-		&i.TokenHash,
 		&i.UserAgent,
-		&i.Ip,
-		&i.ExpiresAt,
-		&i.RevokedAt,
-		&i.CreatedAt,
 	)
 	return i, err
 }

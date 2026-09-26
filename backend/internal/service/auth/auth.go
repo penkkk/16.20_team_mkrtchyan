@@ -7,8 +7,10 @@ import (
 	"errors"
 	"time"
 
+	"opd/internal/repository"
 	authrepo "opd/internal/repository/auth"
 
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -18,7 +20,7 @@ const (
 	refreshTokenHashByteLength = 32
 )
 
-func (s *service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
+func (s *authService) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
 	credentials, err := s.repo.GetUserCredentialsByLogin(ctx, input.Login)
 	if err != nil {
 		if errors.Is(err, authrepo.ErrNotFound) {
@@ -32,7 +34,7 @@ func (s *service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	tokenPair, err := s.tokens.IssueTokenPair(credentials.User.ID)
+	tokenPair, err := s.tokens.IssueTokenPair(credentials.User.ID, input.UserAgent)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -41,6 +43,7 @@ func (s *service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	_, err = s.repo.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
 		UserID:    credentials.User.ID,
 		TokenHash: refreshTokenHash,
+		UserAgent: stringPtrFromString(input.UserAgent),
 		ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
 	})
 	if err != nil {
@@ -57,8 +60,147 @@ func (s *service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	}, nil
 }
 
-func (s *service) Register(ctx context.Context, input RegisterInput) error {
-	return ErrNotImplemented
+func (s *authService) Register(ctx context.Context, input RegisterInput) (LoginResult, error) {
+	conflicts, err := s.repo.FindUserConflicts(ctx, authrepo.FindUserConflictsInput{
+		Username:   input.Username,
+		Email:      input.Email,
+		TgUsername: input.TgUsername,
+	})
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if len(conflicts) > 0 {
+		return LoginResult{}, NewFieldConflictError(conflicts)
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	var result LoginResult
+	err = s.txManager.WithinTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.ReadCommitted,
+	}, func(repositories *repository.Repositories) error {
+		user, err := repositories.Auth.CreateUser(ctx, authrepo.CreateUserInput{
+			Username:   input.Username,
+			Email:      input.Email,
+			TgUsername: input.TgUsername,
+			Name:       input.Name,
+			Surname:    input.Surname,
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = repositories.Auth.CreateUserPassword(ctx, authrepo.CreateUserPasswordInput{
+			UserID:       user.ID,
+			PasswordHash: string(passwordHash),
+		})
+		if err != nil {
+			return err
+		}
+
+		tokenPair, err := s.tokens.IssueTokenPair(user.ID, input.UserAgent)
+		if err != nil {
+			return err
+		}
+
+		refreshTokenHash := hashRefreshToken(tokenPair.RefreshToken)
+		_, err = repositories.Auth.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
+			UserID:    user.ID,
+			TokenHash: refreshTokenHash,
+			UserAgent: stringPtrFromString(input.UserAgent),
+			ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
+		})
+		if err != nil {
+			return err
+		}
+
+		result = LoginResult{
+			AccessToken:      tokenPair.AccessToken,
+			RefreshToken:     tokenPair.RefreshToken,
+			TokenType:        "Bearer",
+			ExpiresIn:        accessTokenTTLSeconds,
+			RefreshExpiresIn: refreshTokenTTLSeconds,
+			User:             userFromRepository(user),
+		}
+
+		return nil
+	})
+	if err != nil {
+		var uniqueErr *authrepo.UniqueConstraintError
+		if errors.As(err, &uniqueErr) {
+			return LoginResult{}, NewFieldConflictError(uniqueErr.Fields)
+		}
+
+		return LoginResult{}, err
+	}
+
+	return result, nil
+}
+
+func (s *authService) Logout(ctx context.Context, input LogoutInput) error {
+	// add access-token blacklist
+	refreshTokenHash := hashRefreshToken(input.RefreshSession)
+	_, err := s.repo.RevokeRefreshSession(ctx, refreshTokenHash)
+	if err != nil {
+		if errors.Is(err, authrepo.ErrNotFound) {
+			return ErrInvalidRefreshSession
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func (s *authService) Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error) {
+	oldRefreshTokenHash := hashRefreshToken(input.RefreshSession)
+	var result RefreshResult
+	err := s.txManager.WithinTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.ReadCommitted,
+	}, func(repositories *repository.Repositories) error {
+		oldSession, err := repositories.Auth.RevokeRefreshSession(ctx, oldRefreshTokenHash)
+		if err != nil {
+			if errors.Is(err, authrepo.ErrNotFound) {
+				return ErrInvalidRefreshSession
+			}
+
+			return err
+		}
+
+		tokenPair, err := s.tokens.IssueTokenPair(oldSession.UserID, oldSession.UserAgent)
+		if err != nil {
+			return err
+		}
+
+		newRefreshTokenHash := hashRefreshToken(tokenPair.RefreshToken)
+		refreshSession := authrepo.CreateRefreshSessionInput{
+			UserID:    oldSession.UserID,
+			UserAgent: stringPtrFromString(oldSession.UserAgent),
+			TokenHash: newRefreshTokenHash,
+			IP:        nil,
+			ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
+		}
+
+		_, err = repositories.Auth.CreateRefreshSession(ctx, refreshSession)
+		if err != nil {
+			return err
+		}
+		result = RefreshResult{
+			AccessToken:      tokenPair.AccessToken,
+			RefreshToken:     tokenPair.RefreshToken,
+			TokenType:        "Bearer",
+			ExpiresIn:        accessTokenTTLSeconds,
+			RefreshExpiresIn: refreshTokenTTLSeconds,
+		}
+		return nil
+	})
+	if err != nil {
+		return RefreshResult{}, err
+	}
+	return result, nil
 }
 
 func userFromRepository(user authrepo.User) User {
@@ -75,4 +217,12 @@ func userFromRepository(user authrepo.User) User {
 func hashRefreshToken(refreshToken string) string {
 	hash := sha256.Sum256([]byte(refreshToken))
 	return hex.EncodeToString(hash[:refreshTokenHashByteLength])
+}
+
+func stringPtrFromString(value string) *string {
+	if value == "" {
+		return nil
+	}
+
+	return &value
 }

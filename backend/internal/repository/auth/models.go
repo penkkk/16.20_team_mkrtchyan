@@ -24,6 +24,12 @@ type CreateUserInput struct {
 	Surname    string
 }
 
+type FindUserConflictsInput struct {
+	Username   string
+	Email      string
+	TgUsername *string
+}
+
 type UserPassword struct {
 	ID           string
 	UserID       string
@@ -49,6 +55,11 @@ type RefreshSession struct {
 	ExpiresAt time.Time
 	RevokedAt *time.Time
 	CreatedAt time.Time
+}
+
+type RevokedRefreshSession struct {
+	UserID    string
+	UserAgent string
 }
 
 type CreateRefreshSessionInput struct {
