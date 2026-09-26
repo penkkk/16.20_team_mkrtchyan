@@ -6,14 +6,14 @@ import (
 )
 
 type User struct {
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 	ID         string
 	Username   string
 	Email      string
 	TgUsername string
 	Name       string
 	Surname    string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
 }
 
 type CreateUserInput struct {
@@ -41,20 +41,20 @@ type CreateUserPasswordInput struct {
 }
 
 type RefreshSession struct {
+	ExpiresAt time.Time
+	CreatedAt time.Time
+	IP        *netip.Addr
+	RevokedAt *time.Time
 	ID        string
 	UserID    string
 	TokenHash string
 	UserAgent string
-	IP        *netip.Addr
-	ExpiresAt time.Time
-	RevokedAt *time.Time
-	CreatedAt time.Time
 }
 
 type CreateRefreshSessionInput struct {
-	UserID    string
-	TokenHash string
+	ExpiresAt time.Time
 	UserAgent *string
 	IP        *netip.Addr
-	ExpiresAt time.Time
+	UserID    string
+	TokenHash string
 }

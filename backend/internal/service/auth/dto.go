@@ -6,12 +6,12 @@ type LoginInput struct {
 }
 
 type LoginResult struct {
+	User             User
 	AccessToken      string
 	RefreshToken     string
 	TokenType        string
 	ExpiresIn        int
 	RefreshExpiresIn int
-	User             User
 }
 
 type RegisterInput struct {
