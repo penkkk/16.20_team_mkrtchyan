@@ -9,7 +9,7 @@ var (
 	ErrInvalidCredentials    = errors.New("invalid credentials")
 	ErrNotImplemented        = errors.New("not implemented")
 	ErrInvalidRefreshSession = errors.New("invalid refresh session")
-	ErrInvalidAccessToken = errors.New("invalid access token")
+	ErrInvalidAccessToken    = errors.New("invalid access token")
 )
 
 type FieldConflictError struct {

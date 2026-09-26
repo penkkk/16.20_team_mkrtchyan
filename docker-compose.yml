@@ -56,7 +56,7 @@ services:
     build:
       context: ./frontend
     ports:
-      - "3000:80"
+      - "3005:80"
 
 volumes:
   postgres18_data:
