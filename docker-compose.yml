@@ -15,6 +15,20 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
   
   migrate:
     image: migrate/migrate:latest
@@ -45,10 +59,13 @@ services:
       APP_PORT: ${APP_PORT:-8080}
       DATABASE_URL: postgres://${POSTGRES_USER:-opd}:${POSTGRES_PASSWORD:-opd}@postgres:5432/${POSTGRES_DB:-opd}?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      REDIS_URL: redis://redis:6379/0
       JWT_ISSUER: ${JWT_ISSUER:-opd-library}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-opd-api}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis: 
         condition: service_healthy
     restart: unless-stopped
 
@@ -60,3 +77,4 @@ services:
 
 volumes:
   postgres18_data:
+  redis_data:
