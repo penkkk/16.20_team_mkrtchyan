@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	authservice "opd/internal/service/auth"
 
@@ -14,6 +15,7 @@ const (
 	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec
 	errorKey               = "error"
 	internalServerErrorMsg = "internal server error"
+	bearerTokenPrefix      = "Bearer "
 )
 
 func (h *Handler) login(c *gin.Context) {
@@ -50,7 +52,10 @@ func (h *Handler) logout(c *gin.Context) {
 		return
 	}
 
+	accessToken, _ := bearerTokenFromHeader(c)
+
 	err = h.service.Logout(c.Request.Context(), authservice.LogoutInput{
+		AccessToken:    accessToken,
 		RefreshSession: refreshToken,
 	})
 	if err != nil {
@@ -111,7 +116,10 @@ func (h *Handler) refresh(c *gin.Context) {
 		return
 	}
 
+	accessToken, _ := bearerTokenFromHeader(c)
+
 	result, err := h.service.Refresh(c.Request.Context(), authservice.LogoutInput{
+		AccessToken:    accessToken,
 		RefreshSession: refreshToken,
 	})
 	if err != nil {
@@ -158,6 +166,24 @@ func refreshResponseFromService(result authservice.RefreshResult) RefreshRespons
 
 func setAccessTokenHeader(c *gin.Context, tokenType string, accessToken string) {
 	c.Header("Authorization", tokenType+" "+accessToken)
+}
+
+func bearerTokenFromHeader(c *gin.Context) (string, bool) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return "", false
+	}
+
+	if !strings.HasPrefix(authHeader, bearerTokenPrefix) {
+		return "", false
+	}
+
+	accessToken := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerTokenPrefix))
+	if accessToken == "" {
+		return "", false
+	}
+
+	return accessToken, true
 }
 
 func setRefreshTokenCookie(c *gin.Context, refreshToken string, maxAge int) {
