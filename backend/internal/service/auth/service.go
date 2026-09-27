@@ -8,6 +8,7 @@ import (
 	token "opd/internal/service/token"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 type AuthService interface {
@@ -31,15 +32,22 @@ type authTxManager interface {
 }
 
 type authService struct {
-	repo      authRepository
-	txManager authTxManager
-	tokens    token.Manager
+	repo        authRepository
+	txManager   authTxManager
+	tokens      token.Manager
+	redisClient *redis.Client
 }
 
-func NewAuthService(repo authRepository, txManager authTxManager, tokens token.Manager) AuthService {
+func NewAuthService(
+	repo authRepository,
+	txManager authTxManager,
+	tokens token.Manager,
+	redisClient *redis.Client,
+) AuthService {
 	return &authService{
-		repo:      repo,
-		txManager: txManager,
-		tokens:    tokens,
+		repo:        repo,
+		txManager:   txManager,
+		tokens:      tokens,
+		redisClient: redisClient,
 	}
 }

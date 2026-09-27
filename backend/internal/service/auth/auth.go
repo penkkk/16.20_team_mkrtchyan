@@ -19,6 +19,7 @@ const (
 	refreshTokenTTLSeconds     = 30 * 24 * 60 * 60
 	refreshTokenHashByteLength = 32
 	bearerTokenType            = "Bearer"
+	redisBlackListPrefix       = "auth:blacklist:"
 )
 
 func (s *authService) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
@@ -143,7 +144,6 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (LoginR
 }
 
 func (s *authService) Logout(ctx context.Context, input LogoutInput) error {
-	// add access-token blacklist
 	refreshTokenHash := hashRefreshToken(input.RefreshSession)
 	_, err := s.repo.RevokeRefreshSession(ctx, refreshTokenHash)
 	if err != nil {
@@ -154,7 +154,7 @@ func (s *authService) Logout(ctx context.Context, input LogoutInput) error {
 		return err
 	}
 
-	return nil
+	return s.addAccessTokenToBlacklist(ctx, input.AccessToken)
 }
 
 func (s *authService) Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error) {
@@ -202,6 +202,11 @@ func (s *authService) Refresh(ctx context.Context, input LogoutInput) (RefreshRe
 	if err != nil {
 		return RefreshResult{}, err
 	}
+
+	if err := s.addAccessTokenToBlacklist(ctx, input.AccessToken); err != nil {
+		return RefreshResult{}, err
+	}
+
 	return result, nil
 }
 
@@ -219,6 +224,31 @@ func userFromRepository(user authrepo.User) User {
 func hashRefreshToken(refreshToken string) string {
 	hash := sha256.Sum256([]byte(refreshToken))
 	return hex.EncodeToString(hash[:refreshTokenHashByteLength])
+}
+
+func (s *authService) addAccessTokenToBlacklist(ctx context.Context, accessToken string) error {
+	if accessToken == "" {
+		return nil
+	}
+
+	claims, err := s.tokens.VerifyAccessToken(accessToken)
+	if err != nil {
+		return nil
+	}
+
+	ttl := time.Until(claims.ExpiresAt)
+	if ttl <= 0 {
+		return nil
+	}
+
+	key := redisBlackListPrefix + hashToken(accessToken)
+
+	return s.redisClient.Set(ctx, key, "1", ttl).Err()
+}
+
+func hashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
 }
 
 func stringPtrFromString(value string) *string {

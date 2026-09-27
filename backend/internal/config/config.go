@@ -12,6 +12,7 @@ type Config struct {
 	JWTSecret   string
 	JWTIssuer   string
 	JWTAudience string
+	RedisURL    string
 }
 
 func Load() (Config, error) {
@@ -35,6 +36,7 @@ func Load() (Config, error) {
 	return Config{
 		HTTPPort:    httpPort,
 		DataBaseURL: os.Getenv("DATABASE_URL"),
+		RedisURL:    os.Getenv("REDIS_URL"),
 		JWTSecret:   jwtSecret,
 		JWTIssuer:   jwtIssuer,
 		JWTAudience: jwtAudience,

@@ -21,6 +21,7 @@ type TokenPair struct {
 }
 
 type Claims struct {
+	ExpiresAt time.Time
 	UserID    string
 	UserAgent string
 }
@@ -108,6 +109,7 @@ func (m *JWTManager) VerifyAccessToken(tokenString string) (Claims, error) {
 	return Claims{
 		UserID:    claims.Subject,
 		UserAgent: claims.UserAgent,
+		ExpiresAt: claims.ExpiresAt.Time,
 	}, nil
 }
 
