@@ -72,8 +72,9 @@ services:
   frontend:
     build:
       context: ./frontend
+    image: frontend:latest
     ports:
-      - "3005:80"
+      - "3000:80"
 
 volumes:
   postgres18_data:
