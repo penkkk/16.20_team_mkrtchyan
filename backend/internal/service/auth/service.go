@@ -18,6 +18,8 @@ type AuthService interface {
 	Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error)
 	StartOAuth(ctx context.Context, input StartOAuthInput) (StartOAuthResult, error)
 	CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (LoginResult, error)
+	StartOAuthLink(ctx context.Context, input StartOAuthLinkInput) (StartOAuthResult, error)
+	AddPassword(ctx context.Context, input AddPasswordInput) error
 }
 
 type authRepository interface {
@@ -29,6 +31,8 @@ type authRepository interface {
 	FindUserConflicts(ctx context.Context, input authrepo.FindUserConflictsInput) ([]string, error)
 	CreateRefreshSession(ctx context.Context, input authrepo.CreateRefreshSessionInput) (authrepo.RefreshSession, error)
 	RevokeRefreshSession(ctx context.Context, tokenHash string) (authrepo.RevokedRefreshSession, error)
+	RevokeActiveRefreshSessionsByUserAgent(ctx context.Context, userID string, userAgent *string) error
+	GetUserPasswordByID(ctx context.Context, input authrepo.GetPasswordByUserIDInput) error
 }
 
 type authTxManager interface {

@@ -21,6 +21,8 @@ import (
 const (
 	OAuthProviderGoogle = "google"
 	OAuthProviderYandex = "yandex"
+	OAuthModeLogin      = "login"
+	OAuthModeLink       = "link"
 	OAuthRedisKey       = "auth:oauth:"
 	OAuthAttemptTTL     = 10 * time.Minute
 )
@@ -91,60 +93,19 @@ type OAuthAttempt struct {
 	CodeVerifier string `json:"code_verifier"`
 	Nonce        string `json:"nonce,omitempty"`
 	ReturnURL    string `json:"return_url,omitempty"`
+	Mode         string `json:"mode"`
+	UserID       string `json:"user_id,omitempty"`
 }
 
 func (s *authService) StartOAuth(ctx context.Context, input StartOAuthInput) (StartOAuthResult, error) {
-	provider, ok := s.oauth.Get(input.Provider)
-	if !ok {
-		return StartOAuthResult{}, ErrUnsupportedOAuthProvider
-	}
+	return s.startOAuthAttempt(ctx, input.Provider, input.ReturnURL, OAuthModeLogin, "")
+}
 
-	redirectURI := s.oauthCallbackURL(input.Provider)
-	if redirectURI == "" {
-		return StartOAuthResult{}, ErrOAuthRedirectURIRequired
+func (s *authService) StartOAuthLink(ctx context.Context, input StartOAuthLinkInput) (StartOAuthResult, error) {
+	if input.UserID == "" {
+		return StartOAuthResult{}, ErrInvalidCredentials
 	}
-
-	state, err := randomURLSafe(32)
-	if err != nil {
-		return StartOAuthResult{}, err
-	}
-	codeVerifier, err := randomURLSafe(64)
-	if err != nil {
-		return StartOAuthResult{}, err
-	}
-	codeChallenge := pkceChallengeS256(codeVerifier)
-	nonce, err := randomURLSafe(32)
-	if err != nil {
-		return StartOAuthResult{}, err
-	}
-
-	attempt := OAuthAttempt{
-		Provider:     input.Provider,
-		CodeVerifier: codeVerifier,
-		Nonce:        nonce,
-		ReturnURL:    s.safeOAuthReturnURL(input.ReturnURL),
-	}
-
-	redirectURL, err := provider.AuthCodeURL(OAuthAuthCodeURLInput{
-		RedirectURI:   redirectURI,
-		State:         state,
-		CodeChallenge: codeChallenge,
-		Nonce:         nonce,
-		Scopes:        provider.Scopes(),
-	})
-	if err != nil {
-		return StartOAuthResult{}, err
-	}
-
-	if err := s.saveOAuthAttempt(ctx, state, attempt); err != nil {
-		return StartOAuthResult{}, err
-	}
-
-	return StartOAuthResult{
-		RedirectURL: redirectURL,
-		State:       state,
-		MaxAge:      int(OAuthAttemptTTL / time.Second),
-	}, nil
+	return s.startOAuthAttempt(ctx, input.Provider, input.ReturnURL, OAuthModeLink, input.UserID)
 }
 
 func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (LoginResult, error) {
@@ -186,6 +147,22 @@ func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInpu
 		return LoginResult{}, err
 	}
 
+	switch attempt.Mode {
+	case "", OAuthModeLogin:
+		return s.completeOAuthLogin(ctx, input, attempt, profile)
+	case OAuthModeLink:
+		return s.completeOAuthLink(ctx, attempt, profile)
+	default:
+		return LoginResult{}, ErrOAuthStateInvalid
+	}
+}
+
+func (s *authService) completeOAuthLogin(
+	ctx context.Context,
+	input CompleteOAuthInput,
+	attempt OAuthAttempt,
+	profile OAuthProfile,
+) (LoginResult, error) {
 	user, err := s.repo.GetUserByExternalIdentity(ctx, profile.Provider, profile.ProviderUserID)
 	if err == nil {
 		result, innerErr := s.issueLoginResult(ctx, s.repo, user, input.UserAgent)
@@ -249,6 +226,108 @@ func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInpu
 	return result, nil
 }
 
+func (s *authService) completeOAuthLink(ctx context.Context, attempt OAuthAttempt, profile OAuthProfile) (LoginResult, error) {
+	if attempt.UserID == "" {
+		return LoginResult{}, ErrOAuthStateInvalid
+	}
+
+	user, err := s.repo.GetUserByExternalIdentity(ctx, profile.Provider, profile.ProviderUserID)
+	if err == nil {
+		if user.ID == attempt.UserID {
+			return LoginResult{ReturnURL: attempt.ReturnURL}, nil
+		}
+
+		return LoginResult{}, ErrOAuthIdentityAlreadyLinked
+	}
+	if !errors.Is(err, authrepo.ErrNotFound) {
+		return LoginResult{}, err
+	}
+
+	_, err = s.repo.CreateExternalIdentity(ctx, authrepo.CreateExternalIdentityInput{
+		UserID:           attempt.UserID,
+		Provider:         profile.Provider,
+		ProviderSubject:  profile.ProviderUserID,
+		ProviderUsername: stringPtrFromString(profile.UsernameHint),
+	})
+	if err != nil {
+		var uniqueErr *authrepo.UniqueConstraintError
+		if errors.As(err, &uniqueErr) {
+			if containsString(uniqueErr.Fields, "provider_subject") {
+				return LoginResult{}, ErrOAuthIdentityAlreadyLinked
+			}
+			if containsString(uniqueErr.Fields, "provider") {
+				return LoginResult{}, ErrOAuthProviderAlreadyLinked
+			}
+		}
+
+		return LoginResult{}, err
+	}
+
+	return LoginResult{ReturnURL: attempt.ReturnURL}, nil
+}
+
+func (s *authService) startOAuthAttempt(
+	ctx context.Context,
+	providerName string,
+	returnURL string,
+	mode string,
+	userID string,
+) (StartOAuthResult, error) {
+	provider, ok := s.oauth.Get(providerName)
+	if !ok {
+		return StartOAuthResult{}, ErrUnsupportedOAuthProvider
+	}
+
+	redirectURI := s.oauthCallbackURL(providerName)
+	if redirectURI == "" {
+		return StartOAuthResult{}, ErrOAuthRedirectURIRequired
+	}
+
+	state, err := randomURLSafe(32)
+	if err != nil {
+		return StartOAuthResult{}, err
+	}
+	codeVerifier, err := randomURLSafe(64)
+	if err != nil {
+		return StartOAuthResult{}, err
+	}
+	codeChallenge := pkceChallengeS256(codeVerifier)
+	nonce, err := randomURLSafe(32)
+	if err != nil {
+		return StartOAuthResult{}, err
+	}
+
+	attempt := OAuthAttempt{
+		Provider:     providerName,
+		CodeVerifier: codeVerifier,
+		Nonce:        nonce,
+		ReturnURL:    s.safeOAuthReturnURL(returnURL),
+		Mode:         mode,
+		UserID:       userID,
+	}
+
+	redirectURL, err := provider.AuthCodeURL(OAuthAuthCodeURLInput{
+		RedirectURI:   redirectURI,
+		State:         state,
+		CodeChallenge: codeChallenge,
+		Nonce:         nonce,
+		Scopes:        provider.Scopes(),
+	})
+	if err != nil {
+		return StartOAuthResult{}, err
+	}
+
+	if err := s.saveOAuthAttempt(ctx, state, attempt); err != nil {
+		return StartOAuthResult{}, err
+	}
+
+	return StartOAuthResult{
+		RedirectURL: redirectURL,
+		State:       state,
+		MaxAge:      int(OAuthAttemptTTL / time.Second),
+	}, nil
+}
+
 func (s *authService) saveOAuthAttempt(ctx context.Context, state string, attempt OAuthAttempt) error {
 	data, err := json.Marshal(attempt)
 	if err != nil {
@@ -310,7 +389,7 @@ func (s *authService) issueLoginResult(ctx context.Context, repo authRepository,
 	}
 
 	refreshTokenHash := hashRefreshToken(tokenPair.RefreshToken)
-	_, err = repo.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
+	_, err = s.createRefreshSession(ctx, repo, authrepo.CreateRefreshSessionInput{
 		UserID:    user.ID,
 		TokenHash: refreshTokenHash,
 		UserAgent: stringPtrFromString(userAgent),

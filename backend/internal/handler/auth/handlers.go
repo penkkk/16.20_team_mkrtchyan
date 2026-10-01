@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"opd/internal/handler/middleware"
 	authservice "opd/internal/service/auth"
 
 	"github.com/gin-gonic/gin"
@@ -219,6 +220,16 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 				errorKey: "username is required",
 				"code":   "oauth_username_required",
 			})
+		case errors.Is(err, authservice.ErrOAuthIdentityAlreadyLinked):
+			c.JSON(http.StatusConflict, gin.H{
+				errorKey: "oauth identity already linked",
+				"code":   "oauth_identity_already_linked",
+			})
+		case errors.Is(err, authservice.ErrOAuthProviderAlreadyLinked):
+			c.JSON(http.StatusConflict, gin.H{
+				errorKey: "oauth provider already linked",
+				"code":   "oauth_provider_already_linked",
+			})
 		case errors.Is(err, authservice.ErrNotImplemented):
 			c.JSON(http.StatusNotImplemented, gin.H{errorKey: "oauth is not implemented"})
 		default:
@@ -228,12 +239,81 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 	}
 
 	clearOAuthStateCookie(c)
-	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
-	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
+	if result.RefreshToken != "" {
+		setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	}
+	if result.AccessToken != "" {
+		setAccessTokenHeader(c, result.TokenType, result.AccessToken)
+	}
 	if result.ReturnURL == "" {
 		result.ReturnURL = "/"
 	}
 	c.Redirect(http.StatusFound, result.ReturnURL)
+}
+
+func (h *Handler) linkExternal(c *gin.Context) {
+	userID := c.GetString(middleware.UserIDKey)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "unauthorized"})
+		return
+	}
+
+	provider := c.Param("provider")
+	returnURL := c.Query("return_url")
+
+	result, err := h.service.StartOAuthLink(c.Request.Context(), authservice.StartOAuthLinkInput{
+		Provider:  provider,
+		ReturnURL: returnURL,
+		UserID:    userID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "unsupported oauth provider"})
+		case errors.Is(err, authservice.ErrOAuthClientIDRequired):
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth client id is not configured"})
+		case errors.Is(err, authservice.ErrOAuthRedirectURIRequired):
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth redirect uri is not configured"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+		}
+		return
+	}
+
+	setOAuthStateCookie(c, result.State, result.MaxAge)
+	c.JSON(http.StatusOK, ExternalLinkResponse{
+		RedirectURL: result.RedirectURL,
+	})
+}
+
+func (h *Handler) addPassword(c *gin.Context) {
+	userID := c.GetString(middleware.UserIDKey)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "unauthorized"})
+		return
+	}
+
+	var req AddPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
+		return
+	}
+
+	err := h.service.AddPassword(c.Request.Context(), authservice.AddPasswordInput{
+		UserID:   userID,
+		Password: req.Password,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, authservice.ErrPasswordAlreadySet):
+			c.JSON(http.StatusConflict, gin.H{errorKey: "password already set"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+		}
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func loginResponseFromService(result authservice.LoginResult) LoginResponse {

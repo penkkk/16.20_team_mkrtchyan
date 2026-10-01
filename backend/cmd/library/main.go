@@ -8,6 +8,7 @@ import (
 
 	"opd/internal/config"
 	authhandler "opd/internal/handler/auth"
+	"opd/internal/handler/middleware"
 	"opd/internal/repository"
 	"opd/internal/service"
 	authservice "opd/internal/service/auth"
@@ -67,10 +68,12 @@ func main() {
 
 	router := gin.Default()
 
+	authRequired := middleware.AuthMiddleware(tokenManager, client)
+
 	api := router.Group("/api")
 	{
 		v1 := api.Group("/v1")
-		authHandler.RegisterRoutes(v1)
+		authHandler.RegisterRoutes(v1, authRequired)
 	}
 
 	router.GET("/ping", func(c *gin.Context) {

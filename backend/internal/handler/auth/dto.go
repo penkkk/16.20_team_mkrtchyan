@@ -5,6 +5,10 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type AddPasswordRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
 type RegisterRequest struct {
 	Username   string `json:"username" binding:"required"`
 	TgUsername string `json:"tg_username"`
@@ -20,6 +24,10 @@ type LoginResponse struct {
 	TokenType        string       `json:"tokenType"`
 	ExpiresIn        int          `json:"expiresIn"`
 	RefreshExpiresIn int          `json:"refreshExpiresIn"`
+}
+
+type ExternalLinkResponse struct {
+	RedirectURL string `json:"redirect_url"`
 }
 
 type RefreshResponse struct {

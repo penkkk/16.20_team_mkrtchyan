@@ -30,6 +30,10 @@ type FindUserConflictsInput struct {
 	Email      string
 }
 
+type GetPasswordByUserIDInput struct {
+	UserID string
+}
+
 type UserPassword struct {
 	ID           string
 	UserID       string

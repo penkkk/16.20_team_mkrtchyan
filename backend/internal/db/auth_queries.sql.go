@@ -324,6 +324,43 @@ func (q *Queries) GetUserCredentialsByLogin(ctx context.Context, username string
 	return i, err
 }
 
+const getUserPasswordByID = `-- name: GetUserPasswordByID :one
+SELECT user_id, password_hash
+FROM auth.user_passwords
+WHERE user_id = $1
+`
+
+type GetUserPasswordByIDRow struct {
+	UserID       pgtype.UUID
+	PasswordHash string
+}
+
+func (q *Queries) GetUserPasswordByID(ctx context.Context, userID pgtype.UUID) (GetUserPasswordByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordByID, userID)
+	var i GetUserPasswordByIDRow
+	err := row.Scan(&i.UserID, &i.PasswordHash)
+	return i, err
+}
+
+const revokeActiveRefreshSessionsByUserAgent = `-- name: RevokeActiveRefreshSessionsByUserAgent :exec
+UPDATE auth.refresh_sessions
+SET revoked_at = NOW()
+WHERE user_id = $1
+  AND user_agent IS NOT DISTINCT FROM $2
+  AND revoked_at IS NULL
+  AND expires_at > NOW()
+`
+
+type RevokeActiveRefreshSessionsByUserAgentParams struct {
+	UserID    pgtype.UUID
+	UserAgent pgtype.Text
+}
+
+func (q *Queries) RevokeActiveRefreshSessionsByUserAgent(ctx context.Context, arg RevokeActiveRefreshSessionsByUserAgentParams) error {
+	_, err := q.db.Exec(ctx, revokeActiveRefreshSessionsByUserAgent, arg.UserID, arg.UserAgent)
+	return err
+}
+
 const revokeRefreshSession = `-- name: RevokeRefreshSession :one
 UPDATE auth.refresh_sessions
 SET revoked_at = NOW()

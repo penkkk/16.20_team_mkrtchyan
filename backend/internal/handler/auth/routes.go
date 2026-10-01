@@ -2,7 +2,7 @@ package auth
 
 import "github.com/gin-gonic/gin"
 
-func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
+func (h *Handler) RegisterRoutes(router *gin.RouterGroup, authRequired gin.HandlerFunc) {
 	auth := router.Group("/auth")
 
 	auth.POST("/login", h.login)
@@ -11,4 +11,6 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	auth.GET("/refresh", h.refresh)
 	auth.GET("/:provider/start", h.startOAuth)
 	auth.GET("/:provider/callback", h.oauthCallback)
+	auth.GET("/:provider/link/start", authRequired, h.linkExternal)
+	auth.POST("/password", authRequired, h.addPassword)
 }

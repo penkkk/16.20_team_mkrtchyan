@@ -43,7 +43,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (LoginResult,
 	}
 
 	refreshTokenHash := hashRefreshToken(tokenPair.RefreshToken)
-	_, err = s.repo.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
+	_, err = s.createRefreshSession(ctx, s.repo, authrepo.CreateRefreshSessionInput{
 		UserID:    credentials.User.ID,
 		TokenHash: refreshTokenHash,
 		UserAgent: stringPtrFromString(input.UserAgent),
@@ -110,7 +110,7 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (LoginR
 		}
 
 		refreshTokenHash := hashRefreshToken(tokenPair.RefreshToken)
-		_, innerErr = repositories.Auth.CreateRefreshSession(ctx, authrepo.CreateRefreshSessionInput{
+		_, innerErr = s.createRefreshSession(ctx, repositories.Auth, authrepo.CreateRefreshSessionInput{
 			UserID:    user.ID,
 			TokenHash: refreshTokenHash,
 			UserAgent: stringPtrFromString(input.UserAgent),
@@ -186,7 +186,7 @@ func (s *authService) Refresh(ctx context.Context, input LogoutInput) (RefreshRe
 			ExpiresAt: time.Now().Add(time.Duration(refreshTokenTTLSeconds) * time.Second),
 		}
 
-		_, err = repositories.Auth.CreateRefreshSession(ctx, refreshSession)
+		_, err = s.createRefreshSession(ctx, repositories.Auth, refreshSession)
 		if err != nil {
 			return err
 		}
@@ -208,6 +208,50 @@ func (s *authService) Refresh(ctx context.Context, input LogoutInput) (RefreshRe
 	}
 
 	return result, nil
+}
+
+func (s *authService) AddPassword(ctx context.Context, input AddPasswordInput) error {
+	err := s.repo.GetUserPasswordByID(ctx, authrepo.GetPasswordByUserIDInput{
+		UserID: input.UserID,
+	})
+	if err == nil {
+		return ErrPasswordAlreadySet
+	}
+	if !errors.Is(err, authrepo.ErrNotFound) {
+		return err
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.repo.CreateUserPassword(ctx, authrepo.CreateUserPasswordInput{
+		UserID:       input.UserID,
+		PasswordHash: string(passwordHash),
+	})
+	if err != nil {
+		var uniqueErr *authrepo.UniqueConstraintError
+		if errors.As(err, &uniqueErr) {
+			return ErrPasswordAlreadySet
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func (s *authService) createRefreshSession(
+	ctx context.Context,
+	repo authRepository,
+	input authrepo.CreateRefreshSessionInput,
+) (authrepo.RefreshSession, error) {
+	if err := repo.RevokeActiveRefreshSessionsByUserAgent(ctx, input.UserID, input.UserAgent); err != nil {
+		return authrepo.RefreshSession{}, err
+	}
+
+	return repo.CreateRefreshSession(ctx, input)
 }
 
 func userFromRepository(user authrepo.User) User {

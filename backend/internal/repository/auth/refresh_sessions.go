@@ -44,6 +44,18 @@ func (r *AuthPostgresRepository) RevokeRefreshSession(ctx context.Context, token
 	return revokedRefreshSessionFromDB(session), nil
 }
 
+func (r *AuthPostgresRepository) RevokeActiveRefreshSessionsByUserAgent(ctx context.Context, userID string, userAgent *string) error {
+	parsedUserID, err := uuidFromString(userID)
+	if err != nil {
+		return err
+	}
+
+	return r.queries.RevokeActiveRefreshSessionsByUserAgent(ctx, db.RevokeActiveRefreshSessionsByUserAgentParams{
+		UserID:    parsedUserID,
+		UserAgent: textFromStringPtr(userAgent),
+	})
+}
+
 func refreshSessionFromDB(session db.AuthRefreshSession) RefreshSession {
 	return RefreshSession{
 		ID:        session.ID.String(),

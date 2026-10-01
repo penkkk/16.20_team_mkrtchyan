@@ -50,10 +50,21 @@ type StartOAuthResult struct {
 	MaxAge      int
 }
 
+type StartOAuthLinkInput struct {
+	Provider  string
+	ReturnURL string
+	UserID    string
+}
+
 type CompleteOAuthInput struct {
 	Provider     string
 	Code         string
 	State        string
 	BrowserState string
 	UserAgent    string
+}
+
+type AddPasswordInput struct {
+	UserID   string
+	Password string
 }

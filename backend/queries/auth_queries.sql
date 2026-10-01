@@ -69,6 +69,14 @@ RETURNING
     user_id,
     user_agent;
 
+-- name: RevokeActiveRefreshSessionsByUserAgent :exec
+UPDATE auth.refresh_sessions
+SET revoked_at = NOW()
+WHERE user_id = sqlc.arg(user_id)
+  AND user_agent IS NOT DISTINCT FROM sqlc.narg(user_agent)
+  AND revoked_at IS NULL
+  AND expires_at > NOW();
+
 -- name: GetUserCredentialsByLogin :one
 SELECT
     u.id,
@@ -138,3 +146,8 @@ RETURNING
     provider_username,
     created_at,
     updated_at;
+
+-- name: GetUserPasswordByID :one
+SELECT user_id, password_hash
+FROM auth.user_passwords
+WHERE user_id = sqlc.arg(user_id);
