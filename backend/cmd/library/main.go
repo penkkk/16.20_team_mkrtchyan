@@ -10,6 +10,7 @@ import (
 	authhandler "opd/internal/handler/auth"
 	"opd/internal/repository"
 	"opd/internal/service"
+	authservice "opd/internal/service/auth"
 	token "opd/internal/service/token"
 
 	"github.com/gin-gonic/gin"
@@ -55,7 +56,13 @@ func main() {
 
 	tokenManager := token.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, 15*time.Minute)
 	repositories := repository.NewRepositoriesWithTxManager(db)
-	services := service.NewServices(repositories, tokenManager, client)
+	services := service.NewServices(repositories, tokenManager, client, authservice.OAuthConfig{
+		GoogleClientID:     cfg.GoogleOAuthClientID,
+		YandexClientID:     cfg.YandexOAuthClientID,
+		AppPublicURL:       cfg.AppPublicURL,
+		YandexClientSecret: cfg.YandexOAuthClientSecret,
+		GoogleClientSecret: cfg.GoogleOAuthClientSecret,
+	})
 	authHandler := authhandler.NewHandler(services.Auth)
 
 	router := gin.Default()

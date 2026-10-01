@@ -101,3 +101,40 @@ FROM (
 ) AS conflicts
 ORDER BY priority
 ;
+
+-- name: GetUserByExternalIdentity :one
+SELECT
+    u.id,
+    u.username,
+    u.email,
+    u.tg_username,
+    u.name,
+    u.surname,
+    u.created_at,
+    u.updated_at
+FROM auth.external_identities AS ei
+JOIN auth.users AS u ON u.id = ei.user_id
+WHERE ei.provider = $1
+  AND ei.provider_subject = $2
+LIMIT 1;
+
+-- name: CreateExternalIdentity :one
+INSERT INTO auth.external_identities (
+    user_id,
+    provider,
+    provider_subject,
+    provider_username
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+RETURNING
+    id,
+    user_id,
+    provider,
+    provider_subject,
+    provider_username,
+    created_at,
+    updated_at;

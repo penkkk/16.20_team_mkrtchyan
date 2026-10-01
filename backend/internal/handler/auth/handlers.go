@@ -13,6 +13,7 @@ import (
 const (
 	refreshTokenCookieName = "refresh_token"
 	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec
+	oauthStateCookieName   = "oauth_state"
 	errorKey               = "error"
 	internalServerErrorMsg = "internal server error"
 	bearerTokenPrefix      = "Bearer "
@@ -138,6 +139,103 @@ func (h *Handler) refresh(c *gin.Context) {
 	c.JSON(http.StatusOK, refreshResponseFromService(result))
 }
 
+func (h *Handler) startOAuth(c *gin.Context) {
+	provider := c.Param("provider")
+	returnURL := c.Query("return_url")
+
+	result, err := h.service.StartOAuth(c.Request.Context(), authservice.StartOAuthInput{
+		Provider:  provider,
+		ReturnURL: returnURL,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "unsupported oauth provider"})
+		case errors.Is(err, authservice.ErrOAuthClientIDRequired):
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth client id is not configured"})
+		case errors.Is(err, authservice.ErrOAuthRedirectURIRequired):
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth redirect uri is not configured"})
+		case errors.Is(err, authservice.ErrNotImplemented):
+			c.JSON(http.StatusNotImplemented, gin.H{errorKey: "oauth is not implemented"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+		}
+		return
+	}
+
+	setOAuthStateCookie(c, result.State, result.MaxAge)
+	c.Redirect(http.StatusFound, result.RedirectURL)
+}
+
+func (h *Handler) oauthCallback(c *gin.Context) {
+	provider := c.Param("provider")
+	code := c.Query("code")
+	state := c.Query("state")
+	providerError := c.Query("error")
+	if providerError != "" {
+		clearOAuthStateCookie(c)
+		c.JSON(http.StatusBadRequest, gin.H{
+			errorKey:            "oauth provider error",
+			"code":              providerError,
+			"error_description": c.Query("error_description"),
+		})
+		return
+	}
+
+	browserState, err := c.Cookie(oauthStateCookieName)
+	if err != nil {
+		clearOAuthStateCookie(c)
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth state is missing"})
+		return
+	}
+
+	result, err := h.service.CompleteOAuth(c.Request.Context(), authservice.CompleteOAuthInput{
+		Provider:     provider,
+		Code:         code,
+		State:        state,
+		BrowserState: browserState,
+		UserAgent:    c.Request.UserAgent(),
+	})
+	if err != nil {
+		clearOAuthStateCookie(c)
+		switch {
+		case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "unsupported oauth provider"})
+		case errors.Is(err, authservice.ErrOAuthStateInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid oauth state"})
+		case errors.Is(err, authservice.ErrOAuthCodeRequired):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth code is required"})
+		case errors.Is(err, authservice.ErrOAuthProviderMismatch):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth provider mismatch"})
+		case errors.Is(err, authservice.ErrOAuthNonceMismatch):
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth nonce mismatch"})
+		case errors.Is(err, authservice.ErrOAuthEmailAlreadyUsed):
+			c.JSON(http.StatusConflict, gin.H{
+				errorKey: "email already registered; link oauth provider in profile",
+				"code":   "oauth_email_already_used",
+			})
+		case errors.Is(err, authservice.ErrOAuthUsernameRequired):
+			c.JSON(http.StatusConflict, gin.H{
+				errorKey: "username is required",
+				"code":   "oauth_username_required",
+			})
+		case errors.Is(err, authservice.ErrNotImplemented):
+			c.JSON(http.StatusNotImplemented, gin.H{errorKey: "oauth is not implemented"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+		}
+		return
+	}
+
+	clearOAuthStateCookie(c)
+	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
+	if result.ReturnURL == "" {
+		result.ReturnURL = "/"
+	}
+	c.Redirect(http.StatusFound, result.ReturnURL)
+}
+
 func loginResponseFromService(result authservice.LoginResult) LoginResponse {
 	return LoginResponse{
 		AccessToken:      result.AccessToken,
@@ -194,7 +292,7 @@ func setRefreshTokenCookie(c *gin.Context, refreshToken string, maxAge int) {
 		maxAge,
 		refreshTokenCookiePath,
 		"",
-		true,
+		secureCookie(c),
 		true,
 	)
 }
@@ -207,9 +305,39 @@ func clearRefreshTokenCookie(c *gin.Context) {
 		-1,
 		refreshTokenCookiePath,
 		"",
-		true,
+		secureCookie(c),
 		true,
 	)
+}
+
+func setOAuthStateCookie(c *gin.Context, state string, maxAge int) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		oauthStateCookieName,
+		state,
+		maxAge,
+		refreshTokenCookiePath,
+		"",
+		secureCookie(c),
+		true,
+	)
+}
+
+func clearOAuthStateCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		oauthStateCookieName,
+		"",
+		-1,
+		refreshTokenCookiePath,
+		"",
+		secureCookie(c),
+		true,
+	)
+}
+
+func secureCookie(c *gin.Context) bool {
+	return c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 }
 
 func optionalStringPtr(value string) *string {

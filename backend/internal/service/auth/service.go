@@ -16,11 +16,15 @@ type AuthService interface {
 	Register(ctx context.Context, input RegisterInput) (LoginResult, error)
 	Logout(ctx context.Context, input LogoutInput) error
 	Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error)
+	StartOAuth(ctx context.Context, input StartOAuthInput) (StartOAuthResult, error)
+	CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (LoginResult, error)
 }
 
 type authRepository interface {
 	CreateUser(ctx context.Context, input authrepo.CreateUserInput) (authrepo.User, error)
 	CreateUserPassword(ctx context.Context, input authrepo.CreateUserPasswordInput) (authrepo.UserPassword, error)
+	GetUserByExternalIdentity(ctx context.Context, provider string, providerSubject string) (authrepo.User, error)
+	CreateExternalIdentity(ctx context.Context, input authrepo.CreateExternalIdentityInput) (authrepo.ExternalIdentity, error)
 	GetUserCredentialsByLogin(ctx context.Context, login string) (authrepo.UserCredentials, error)
 	FindUserConflicts(ctx context.Context, input authrepo.FindUserConflictsInput) ([]string, error)
 	CreateRefreshSession(ctx context.Context, input authrepo.CreateRefreshSessionInput) (authrepo.RefreshSession, error)
@@ -32,10 +36,20 @@ type authTxManager interface {
 }
 
 type authService struct {
-	repo        authRepository
-	txManager   authTxManager
-	tokens      token.Manager
-	redisClient *redis.Client
+	repo         authRepository
+	txManager    authTxManager
+	tokens       token.Manager
+	redisClient  *redis.Client
+	oauth        *OAuthProviderRegistry
+	appPublicURL string
+}
+
+type OAuthConfig struct {
+	GoogleClientID     string
+	YandexClientID     string
+	GoogleClientSecret string
+	YandexClientSecret string
+	AppPublicURL       string
 }
 
 func NewAuthService(
@@ -43,11 +57,17 @@ func NewAuthService(
 	txManager authTxManager,
 	tokens token.Manager,
 	redisClient *redis.Client,
+	oauthConfig OAuthConfig,
 ) AuthService {
 	return &authService{
-		repo:        repo,
-		txManager:   txManager,
-		tokens:      tokens,
-		redisClient: redisClient,
+		repo:         repo,
+		txManager:    txManager,
+		tokens:       tokens,
+		redisClient:  redisClient,
+		appPublicURL: oauthConfig.AppPublicURL,
+		oauth: NewOAuthProviderRegistry(
+			NewGoogleOAuthProvider(oauthConfig.GoogleClientID, oauthConfig.GoogleClientSecret),
+			NewYandexOAuthProvider(oauthConfig.YandexClientID, oauthConfig.YandexClientSecret),
+		),
 	}
 }
