@@ -14,8 +14,8 @@ import (
 const (
 	googleOAuthAuthorizeURL = "https://accounts.google.com/o/oauth2/v2/auth"
 	yandexOAuthAuthorizeURL = "https://oauth.yandex.ru/authorize"
-	googleTokenURL          = "https://oauth2.googleapis.com/token"
-	yandexTokenURL          = "https://oauth.yandex.ru/token"
+	googleTokenURL          = "https://oauth2.googleapis.com/token" // #nosec G101 -- OAuth token endpoint, not a credential.
+	yandexTokenURL          = "https://oauth.yandex.ru/token"       // #nosec G101 -- OAuth token endpoint, not a credential.
 	yandexUserInfoURL       = "https://login.yandex.ru/info?format=json"
 )
 
@@ -273,13 +273,4 @@ func exchangeOAuthCode(
 		TokenType:    tokenResponse.TokenType,
 		ExpiresIn:    tokenResponse.ExpiresIn,
 	}, nil
-}
-
-func verifyGoogleIDToken(ctx context.Context, rawIDToken string, clientID string) (*idtoken.Payload, error) {
-	payload, err := idtoken.Validate(ctx, rawIDToken, clientID)
-	if err != nil {
-		return nil, err
-	}
-
-	return payload, nil
 }

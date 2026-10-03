@@ -20,11 +20,13 @@ type AuthService interface {
 	CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (LoginResult, error)
 	StartOAuthLink(ctx context.Context, input StartOAuthLinkInput) (StartOAuthResult, error)
 	AddPassword(ctx context.Context, input AddPasswordInput) error
+	Me(ctx context.Context, input MeInput) (User, error)
 }
 
 type authRepository interface {
 	CreateUser(ctx context.Context, input authrepo.CreateUserInput) (authrepo.User, error)
 	CreateUserPassword(ctx context.Context, input authrepo.CreateUserPasswordInput) (authrepo.UserPassword, error)
+	GetUserByID(ctx context.Context, input authrepo.GetUserByIDInput) (authrepo.User, error)
 	GetUserByExternalIdentity(ctx context.Context, provider string, providerSubject string) (authrepo.User, error)
 	CreateExternalIdentity(ctx context.Context, input authrepo.CreateExternalIdentityInput) (authrepo.ExternalIdentity, error)
 	GetUserCredentialsByLogin(ctx context.Context, login string) (authrepo.UserCredentials, error)

@@ -14,12 +14,24 @@ import (
 	authservice "opd/internal/service/auth"
 	token "opd/internal/service/token"
 
+	_ "opd/docs"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title Library API
+// @version 1.0
+// @description Library backend API.
+// @host localhost
+// @BasePath /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	_ = godotenv.Load()
 
@@ -67,6 +79,7 @@ func main() {
 	authHandler := authhandler.NewHandler(services.Auth)
 
 	router := gin.Default()
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	authRequired := middleware.AuthMiddleware(tokenManager, client)
 

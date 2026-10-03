@@ -66,6 +66,24 @@ func (r *AuthPostgresRepository) GetUserCredentialsByLogin(ctx context.Context, 
 	return userCredentialsFromDB(credentials), nil
 }
 
+func (r *AuthPostgresRepository) GetUserByID(ctx context.Context, input GetUserByIDInput) (User, error) {
+	userID, err := uuidFromString(input.UserID)
+	if err != nil {
+		return User{}, err
+	}
+
+	user, err := r.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+
+		return User{}, err
+	}
+
+	return userFromDB(user), nil
+}
+
 func (r *AuthPostgresRepository) FindUserConflicts(ctx context.Context, input FindUserConflictsInput) ([]string, error) {
 	return r.queries.FindUserConflicts(ctx, db.FindUserConflictsParams{
 		Username:   input.Username,

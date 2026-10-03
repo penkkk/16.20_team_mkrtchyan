@@ -68,3 +68,7 @@ type AddPasswordInput struct {
 	UserID   string
 	Password string
 }
+
+type MeInput struct {
+	UserID string
+}

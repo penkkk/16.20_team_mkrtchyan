@@ -94,6 +94,20 @@ WHERE u.username = $1
    OR LOWER(u.email) = LOWER($1::text)
 LIMIT 1;
 
+-- name: GetUserByID :one
+SELECT
+    id,
+    username,
+    email,
+    tg_username,
+    name,
+    surname,
+    created_at,
+    updated_at
+FROM auth.users
+WHERE id = sqlc.arg(id)
+LIMIT 1;
+
 -- name: FindUserConflicts :many
 SELECT field
 FROM (

@@ -242,6 +242,21 @@ func (s *authService) AddPassword(ctx context.Context, input AddPasswordInput) e
 	return nil
 }
 
+func (s *authService) Me(ctx context.Context, input MeInput) (User, error) {
+	user, err := s.repo.GetUserByID(ctx, authrepo.GetUserByIDInput{
+		UserID: input.UserID,
+	})
+	if err != nil {
+		if errors.Is(err, authrepo.ErrNotFound) {
+			return User{}, ErrUserNotFound
+		}
+
+		return User{}, err
+	}
+
+	return userFromRepository(user), nil
+}
+
 func (s *authService) createRefreshSession(
 	ctx context.Context,
 	repo authRepository,

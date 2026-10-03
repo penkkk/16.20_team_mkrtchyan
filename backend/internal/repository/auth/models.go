@@ -30,6 +30,10 @@ type FindUserConflictsInput struct {
 	Email      string
 }
 
+type GetUserByIDInput struct {
+	UserID string
+}
+
 type GetPasswordByUserIDInput struct {
 	UserID string
 }
@@ -75,18 +79,18 @@ type CreateRefreshSessionInput struct {
 }
 
 type ExternalIdentity struct {
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 	ID               string
 	UserID           string
 	Provider         string
 	ProviderSubject  string
 	ProviderUsername string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
 }
 
 type CreateExternalIdentityInput struct {
+	ProviderUsername *string
 	UserID           string
 	Provider         string
 	ProviderSubject  string
-	ProviderUsername *string
 }

@@ -23,6 +23,7 @@ var (
 	ErrOAuthIdentityAlreadyLinked = errors.New("oauth identity already linked")
 	ErrOAuthProviderAlreadyLinked = errors.New("oauth provider already linked")
 	ErrPasswordAlreadySet         = errors.New("password already set")
+	ErrUserNotFound               = errors.New("user not found")
 )
 
 type FieldConflictError struct {

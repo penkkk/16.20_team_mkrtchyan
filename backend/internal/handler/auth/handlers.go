@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"opd/internal/handler/apierror"
 	"opd/internal/handler/middleware"
 	authservice "opd/internal/service/auth"
 
@@ -15,15 +16,26 @@ const (
 	refreshTokenCookieName = "refresh_token"
 	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec
 	oauthStateCookieName   = "oauth_state"
-	errorKey               = "error"
 	internalServerErrorMsg = "internal server error"
 	bearerTokenPrefix      = "Bearer "
 )
 
+// login godoc
+// @Summary Login
+// @Description Authenticates a user and returns access and refresh token metadata. Refresh token is also set as an HTTP-only cookie.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body LoginRequest true "Login credentials"
+// @Success 200 {object} LoginResponse
+// @Failure 400 {object} apierror.Response
+// @Failure 401 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/login [post]
 func (h *Handler) login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
+		respondValidationError(c, err)
 		return
 	}
 
@@ -35,9 +47,9 @@ func (h *Handler) login(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidCredentials):
-			c.JSON(http.StatusUnauthorized, gin.H{errorKey: "invalid login or password"})
+			apierror.Respond(c, http.StatusUnauthorized, "invalid_credentials", "Invalid login or password.")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+			respondInternalServerError(c)
 		}
 		return
 	}
@@ -47,10 +59,21 @@ func (h *Handler) login(c *gin.Context) {
 	c.JSON(http.StatusOK, loginResponseFromService(result))
 }
 
+// logout godoc
+// @Summary Logout
+// @Description Invalidates the current refresh session and blacklists the access token when it is provided.
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Param Cookie header string true "refresh_token cookie"
+// @Success 204
+// @Failure 401 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/logout [delete]
 func (h *Handler) logout(c *gin.Context) {
 	refreshToken, err := c.Cookie(refreshTokenCookieName)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "refresh session is required"})
+		apierror.Respond(c, http.StatusUnauthorized, "refresh_session_required", "Refresh session is required.")
 		return
 	}
 
@@ -64,9 +87,9 @@ func (h *Handler) logout(c *gin.Context) {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidRefreshSession):
 			clearRefreshTokenCookie(c)
-			c.JSON(http.StatusUnauthorized, gin.H{errorKey: "invalid refresh session"})
+			apierror.Respond(c, http.StatusUnauthorized, "invalid_refresh_session", "Invalid refresh session.")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "internal server error"})
+			respondInternalServerError(c)
 		}
 		return
 	}
@@ -75,10 +98,22 @@ func (h *Handler) logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// register godoc
+// @Summary Register
+// @Description Creates a user and returns access and refresh token metadata. Refresh token is also set as an HTTP-only cookie.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body RegisterRequest true "Registration data"
+// @Success 201 {object} LoginResponse
+// @Failure 400 {object} apierror.Response
+// @Failure 409 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/register [post]
 func (h *Handler) register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
+		respondValidationError(c, err)
 		return
 	}
 
@@ -96,12 +131,10 @@ func (h *Handler) register(c *gin.Context) {
 		var conflictErr *authservice.FieldConflictError
 		switch {
 		case errors.As(err, &conflictErr):
-			c.JSON(http.StatusConflict, gin.H{
-				errorKey: "fields already taken",
-				"fields": conflictFieldsResponse(conflictErr.Fields),
-			})
+			code, message, details := fieldConflictError(conflictErr.Fields)
+			apierror.Respond(c, http.StatusConflict, code, message, details...)
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+			respondInternalServerError(c)
 		}
 		return
 	}
@@ -111,10 +144,21 @@ func (h *Handler) register(c *gin.Context) {
 	c.JSON(http.StatusCreated, loginResponseFromService(result))
 }
 
+// refresh godoc
+// @Summary Refresh tokens
+// @Description Issues a new access token using the refresh token cookie.
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Param Cookie header string true "refresh_token cookie"
+// @Success 200 {object} RefreshResponse
+// @Failure 401 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/refresh [get]
 func (h *Handler) refresh(c *gin.Context) {
 	refreshToken, err := c.Cookie(refreshTokenCookieName)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "refresh session is required"})
+		apierror.Respond(c, http.StatusUnauthorized, "refresh_session_required", "Refresh session is required.")
 		return
 	}
 
@@ -128,9 +172,9 @@ func (h *Handler) refresh(c *gin.Context) {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidRefreshSession):
 			clearRefreshTokenCookie(c)
-			c.JSON(http.StatusUnauthorized, gin.H{errorKey: "invalid refresh session"})
+			apierror.Respond(c, http.StatusUnauthorized, "invalid_refresh_session", "Invalid refresh session.")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "internal server error"})
+			respondInternalServerError(c)
 		}
 		return
 	}
@@ -140,6 +184,18 @@ func (h *Handler) refresh(c *gin.Context) {
 	c.JSON(http.StatusOK, refreshResponseFromService(result))
 }
 
+// startOAuth godoc
+// @Summary Start OAuth
+// @Description Starts an OAuth flow for the selected provider and redirects to the provider authorization page.
+// @Tags auth
+// @Produce json
+// @Param provider path string true "OAuth provider" Enums(google,yandex)
+// @Param return_url query string false "URL to redirect to after successful OAuth callback"
+// @Success 302
+// @Failure 400 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Failure 501 {object} apierror.Response
+// @Router /auth/{provider}/start [get]
 func (h *Handler) startOAuth(c *gin.Context) {
 	provider := c.Param("provider")
 	returnURL := c.Query("return_url")
@@ -151,15 +207,15 @@ func (h *Handler) startOAuth(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "unsupported oauth provider"})
+			apierror.Respond(c, http.StatusBadRequest, "unsupported_oauth_provider", "Unsupported OAuth provider.")
 		case errors.Is(err, authservice.ErrOAuthClientIDRequired):
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth client id is not configured"})
+			apierror.Respond(c, http.StatusInternalServerError, "oauth_client_id_not_configured", "OAuth client ID is not configured.")
 		case errors.Is(err, authservice.ErrOAuthRedirectURIRequired):
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth redirect uri is not configured"})
+			apierror.Respond(c, http.StatusInternalServerError, "oauth_redirect_uri_not_configured", "OAuth redirect URI is not configured.")
 		case errors.Is(err, authservice.ErrNotImplemented):
-			c.JSON(http.StatusNotImplemented, gin.H{errorKey: "oauth is not implemented"})
+			apierror.Respond(c, http.StatusNotImplemented, "oauth_not_implemented", "OAuth is not implemented.")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+			respondInternalServerError(c)
 		}
 		return
 	}
@@ -168,6 +224,23 @@ func (h *Handler) startOAuth(c *gin.Context) {
 	c.Redirect(http.StatusFound, result.RedirectURL)
 }
 
+// oauthCallback godoc
+// @Summary Complete OAuth
+// @Description Completes an OAuth flow, sets session cookies when authentication succeeds, and redirects to the return URL.
+// @Tags auth
+// @Produce json
+// @Param provider path string true "OAuth provider" Enums(google,yandex)
+// @Param code query string false "OAuth authorization code"
+// @Param state query string false "OAuth state"
+// @Param error query string false "OAuth provider error code"
+// @Param error_description query string false "OAuth provider error description"
+// @Param Cookie header string true "oauth_state cookie"
+// @Success 302
+// @Failure 400 {object} apierror.Response
+// @Failure 409 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Failure 501 {object} apierror.Response
+// @Router /auth/{provider}/callback [get]
 func (h *Handler) oauthCallback(c *gin.Context) {
 	provider := c.Param("provider")
 	code := c.Query("code")
@@ -175,18 +248,21 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 	providerError := c.Query("error")
 	if providerError != "" {
 		clearOAuthStateCookie(c)
-		c.JSON(http.StatusBadRequest, gin.H{
-			errorKey:            "oauth provider error",
-			"code":              providerError,
-			"error_description": c.Query("error_description"),
-		})
+		apierror.Respond(
+			c,
+			http.StatusBadRequest,
+			"oauth_provider_error",
+			"OAuth provider returned an error.",
+			apierror.Detail{Field: "error", Message: providerError},
+			apierror.Detail{Field: "error_description", Message: c.Query("error_description")},
+		)
 		return
 	}
 
 	browserState, err := c.Cookie(oauthStateCookieName)
 	if err != nil {
 		clearOAuthStateCookie(c)
-		c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth state is missing"})
+		apierror.Respond(c, http.StatusBadRequest, "oauth_state_missing", "OAuth state is missing.")
 		return
 	}
 
@@ -199,42 +275,7 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 	})
 	if err != nil {
 		clearOAuthStateCookie(c)
-		switch {
-		case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "unsupported oauth provider"})
-		case errors.Is(err, authservice.ErrOAuthStateInvalid):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid oauth state"})
-		case errors.Is(err, authservice.ErrOAuthCodeRequired):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth code is required"})
-		case errors.Is(err, authservice.ErrOAuthProviderMismatch):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth provider mismatch"})
-		case errors.Is(err, authservice.ErrOAuthNonceMismatch):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "oauth nonce mismatch"})
-		case errors.Is(err, authservice.ErrOAuthEmailAlreadyUsed):
-			c.JSON(http.StatusConflict, gin.H{
-				errorKey: "email already registered; link oauth provider in profile",
-				"code":   "oauth_email_already_used",
-			})
-		case errors.Is(err, authservice.ErrOAuthUsernameRequired):
-			c.JSON(http.StatusConflict, gin.H{
-				errorKey: "username is required",
-				"code":   "oauth_username_required",
-			})
-		case errors.Is(err, authservice.ErrOAuthIdentityAlreadyLinked):
-			c.JSON(http.StatusConflict, gin.H{
-				errorKey: "oauth identity already linked",
-				"code":   "oauth_identity_already_linked",
-			})
-		case errors.Is(err, authservice.ErrOAuthProviderAlreadyLinked):
-			c.JSON(http.StatusConflict, gin.H{
-				errorKey: "oauth provider already linked",
-				"code":   "oauth_provider_already_linked",
-			})
-		case errors.Is(err, authservice.ErrNotImplemented):
-			c.JSON(http.StatusNotImplemented, gin.H{errorKey: "oauth is not implemented"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
-		}
+		respondOAuthCallbackError(c, err)
 		return
 	}
 
@@ -251,10 +292,50 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 	c.Redirect(http.StatusFound, result.ReturnURL)
 }
 
+func respondOAuthCallbackError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
+		apierror.Respond(c, http.StatusBadRequest, "unsupported_oauth_provider", "Unsupported OAuth provider.")
+	case errors.Is(err, authservice.ErrOAuthStateInvalid):
+		apierror.Respond(c, http.StatusBadRequest, "invalid_oauth_state", "Invalid OAuth state.")
+	case errors.Is(err, authservice.ErrOAuthCodeRequired):
+		apierror.Respond(c, http.StatusBadRequest, "oauth_code_required", "OAuth code is required.")
+	case errors.Is(err, authservice.ErrOAuthProviderMismatch):
+		apierror.Respond(c, http.StatusBadRequest, "oauth_provider_mismatch", "OAuth provider mismatch.")
+	case errors.Is(err, authservice.ErrOAuthNonceMismatch):
+		apierror.Respond(c, http.StatusBadRequest, "oauth_nonce_mismatch", "OAuth nonce mismatch.")
+	case errors.Is(err, authservice.ErrOAuthEmailAlreadyUsed):
+		apierror.Respond(c, http.StatusConflict, "oauth_email_already_used", "Email is already registered; link OAuth provider in profile.")
+	case errors.Is(err, authservice.ErrOAuthUsernameRequired):
+		apierror.Respond(c, http.StatusConflict, "oauth_username_required", "Username is required.")
+	case errors.Is(err, authservice.ErrOAuthIdentityAlreadyLinked):
+		apierror.Respond(c, http.StatusConflict, "oauth_identity_already_linked", "OAuth identity is already linked.")
+	case errors.Is(err, authservice.ErrOAuthProviderAlreadyLinked):
+		apierror.Respond(c, http.StatusConflict, "oauth_provider_already_linked", "OAuth provider is already linked.")
+	case errors.Is(err, authservice.ErrNotImplemented):
+		apierror.Respond(c, http.StatusNotImplemented, "oauth_not_implemented", "OAuth is not implemented.")
+	default:
+		respondInternalServerError(c)
+	}
+}
+
+// linkExternal godoc
+// @Summary Start OAuth linking
+// @Description Creates an OAuth authorization URL for linking an external provider to the authenticated user.
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Param provider path string true "OAuth provider" Enums(google,yandex)
+// @Param return_url query string false "URL to redirect to after successful OAuth callback"
+// @Success 200 {object} ExternalLinkResponse
+// @Failure 400 {object} apierror.Response
+// @Failure 401 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/{provider}/link/start [get]
 func (h *Handler) linkExternal(c *gin.Context) {
 	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "unauthorized"})
+		apierror.Respond(c, http.StatusUnauthorized, "unauthorized", "Unauthorized.")
 		return
 	}
 
@@ -269,13 +350,13 @@ func (h *Handler) linkExternal(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrUnsupportedOAuthProvider):
-			c.JSON(http.StatusBadRequest, gin.H{errorKey: "unsupported oauth provider"})
+			apierror.Respond(c, http.StatusBadRequest, "unsupported_oauth_provider", "Unsupported OAuth provider.")
 		case errors.Is(err, authservice.ErrOAuthClientIDRequired):
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth client id is not configured"})
+			apierror.Respond(c, http.StatusInternalServerError, "oauth_client_id_not_configured", "OAuth client ID is not configured.")
 		case errors.Is(err, authservice.ErrOAuthRedirectURIRequired):
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: "oauth redirect uri is not configured"})
+			apierror.Respond(c, http.StatusInternalServerError, "oauth_redirect_uri_not_configured", "OAuth redirect URI is not configured.")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+			respondInternalServerError(c)
 		}
 		return
 	}
@@ -286,16 +367,30 @@ func (h *Handler) linkExternal(c *gin.Context) {
 	})
 }
 
+// addPassword godoc
+// @Summary Add password
+// @Description Adds a password to the authenticated user when password authentication is not configured yet.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body AddPasswordRequest true "Password data"
+// @Success 204
+// @Failure 400 {object} apierror.Response
+// @Failure 401 {object} apierror.Response
+// @Failure 409 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/password [post]
 func (h *Handler) addPassword(c *gin.Context) {
 	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "unauthorized"})
+		apierror.Respond(c, http.StatusUnauthorized, "unauthorized", "Unauthorized.")
 		return
 	}
 
 	var req AddPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
+		respondValidationError(c, err)
 		return
 	}
 
@@ -306,14 +401,48 @@ func (h *Handler) addPassword(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrPasswordAlreadySet):
-			c.JSON(http.StatusConflict, gin.H{errorKey: "password already set"})
+			apierror.Respond(c, http.StatusConflict, "password_already_set", "Password is already set.")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{errorKey: internalServerErrorMsg})
+			respondInternalServerError(c)
 		}
 		return
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// me godoc
+// @Summary Current user
+// @Description Returns the authenticated user's profile.
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} UserResponse
+// @Failure 401 {object} apierror.Response
+// @Failure 404 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /me [get]
+func (h *Handler) me(c *gin.Context) {
+	userID := c.GetString(middleware.UserIDKey)
+	if userID == "" {
+		apierror.Respond(c, http.StatusUnauthorized, "unauthorized", "Unauthorized.")
+		return
+	}
+
+	user, err := h.service.Me(c.Request.Context(), authservice.MeInput{
+		UserID: userID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, authservice.ErrUserNotFound):
+			apierror.Respond(c, http.StatusNotFound, "user_not_found", "User not found.")
+		default:
+			respondInternalServerError(c)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, userResponseFromService(user))
 }
 
 func loginResponseFromService(result authservice.LoginResult) LoginResponse {
@@ -322,14 +451,7 @@ func loginResponseFromService(result authservice.LoginResult) LoginResponse {
 		TokenType:        result.TokenType,
 		ExpiresIn:        result.ExpiresIn,
 		RefreshExpiresIn: result.RefreshExpiresIn,
-		User: UserResponse{
-			ID:         result.User.ID,
-			Username:   result.User.Username,
-			Email:      result.User.Email,
-			TgUsername: result.User.TgUsername,
-			Name:       result.User.Name,
-			Surname:    result.User.Surname,
-		},
+		User:             userResponseFromService(result.User),
 	}
 }
 
@@ -339,6 +461,17 @@ func refreshResponseFromService(result authservice.RefreshResult) RefreshRespons
 		TokenType:        result.TokenType,
 		ExpiresIn:        result.ExpiresIn,
 		RefreshExpiresIn: result.RefreshExpiresIn,
+	}
+}
+
+func userResponseFromService(user authservice.User) UserResponse {
+	return UserResponse{
+		ID:         user.ID,
+		Username:   user.Username,
+		Email:      user.Email,
+		TgUsername: user.TgUsername,
+		Name:       user.Name,
+		Surname:    user.Surname,
 	}
 }
 
@@ -428,11 +561,64 @@ func optionalStringPtr(value string) *string {
 	return &value
 }
 
-func conflictFieldsResponse(fields []string) map[string]string {
-	response := make(map[string]string, len(fields))
-	for _, field := range fields {
-		response[field] = "already_taken"
+func respondValidationError(c *gin.Context, err error) {
+	apierror.Respond(
+		c,
+		http.StatusBadRequest,
+		"invalid_request",
+		"Request is invalid.",
+		apierror.Detail{Message: err.Error()},
+	)
+}
+
+func respondInternalServerError(c *gin.Context) {
+	apierror.Respond(c, http.StatusInternalServerError, "internal_server_error", internalServerErrorMsg)
+}
+
+func fieldConflictError(fields []string) (string, string, []apierror.Detail) {
+	if len(fields) == 1 {
+		field := fields[0]
+		return fieldConflictCode(field), fieldConflictMessage(field), []apierror.Detail{
+			{
+				Field:   field,
+				Message: fieldConflictMessage(field),
+			},
+		}
 	}
 
-	return response
+	details := make([]apierror.Detail, 0, len(fields))
+	for _, field := range fields {
+		details = append(details, apierror.Detail{
+			Field:   field,
+			Message: fieldConflictMessage(field),
+		})
+	}
+
+	return "fields_already_taken", "One or more fields are already taken.", details
+}
+
+func fieldConflictCode(field string) string {
+	switch field {
+	case "username":
+		return "username_already_exists"
+	case "email":
+		return "email_already_exists"
+	case "tg_username":
+		return "telegram_username_already_exists"
+	default:
+		return "field_already_exists"
+	}
+}
+
+func fieldConflictMessage(field string) string {
+	switch field {
+	case "username":
+		return "User with this username already exists."
+	case "email":
+		return "User with this email already exists."
+	case "tg_username":
+		return "User with this Telegram username already exists."
+	default:
+		return "Field value already exists."
+	}
 }

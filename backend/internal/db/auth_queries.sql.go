@@ -277,6 +277,37 @@ func (q *Queries) GetUserByExternalIdentity(ctx context.Context, arg GetUserByEx
 	return i, err
 }
 
+const getUserByID = `-- name: GetUserByID :one
+SELECT
+    id,
+    username,
+    email,
+    tg_username,
+    name,
+    surname,
+    created_at,
+    updated_at
+FROM auth.users
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (AuthUser, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i AuthUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.TgUsername,
+		&i.Name,
+		&i.Surname,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserCredentialsByLogin = `-- name: GetUserCredentialsByLogin :one
 SELECT
     u.id,

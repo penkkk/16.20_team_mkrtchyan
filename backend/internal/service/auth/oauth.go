@@ -82,10 +82,10 @@ type OAuthProfile struct {
 	Provider       string
 	ProviderUserID string
 	Email          string
-	EmailVerified  bool
 	FirstName      string
 	LastName       string
 	UsernameHint   string
+	EmailVerified  bool
 }
 
 type OAuthAttempt struct {
@@ -177,7 +177,8 @@ func (s *authService) completeOAuthLogin(
 		return LoginResult{}, err
 	}
 
-	if err := s.validateNewOAuthUser(ctx, profile); err != nil {
+	err = s.validateNewOAuthUser(ctx, profile)
+	if err != nil {
 		return LoginResult{}, err
 	}
 
