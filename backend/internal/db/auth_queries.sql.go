@@ -12,6 +12,55 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createExternalIdentity = `-- name: CreateExternalIdentity :one
+INSERT INTO auth.external_identities (
+    user_id,
+    provider,
+    provider_subject,
+    provider_username
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+RETURNING
+    id,
+    user_id,
+    provider,
+    provider_subject,
+    provider_username,
+    created_at,
+    updated_at
+`
+
+type CreateExternalIdentityParams struct {
+	UserID           pgtype.UUID
+	Provider         string
+	ProviderSubject  string
+	ProviderUsername pgtype.Text
+}
+
+func (q *Queries) CreateExternalIdentity(ctx context.Context, arg CreateExternalIdentityParams) (AuthExternalIdentity, error) {
+	row := q.db.QueryRow(ctx, createExternalIdentity,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderSubject,
+		arg.ProviderUsername,
+	)
+	var i AuthExternalIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderSubject,
+		&i.ProviderUsername,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createRefreshSession = `-- name: CreateRefreshSession :one
 INSERT INTO auth.refresh_sessions (
     user_id,
@@ -190,6 +239,75 @@ func (q *Queries) FindUserConflicts(ctx context.Context, arg FindUserConflictsPa
 	return items, nil
 }
 
+const getUserByExternalIdentity = `-- name: GetUserByExternalIdentity :one
+SELECT
+    u.id,
+    u.username,
+    u.email,
+    u.tg_username,
+    u.name,
+    u.surname,
+    u.created_at,
+    u.updated_at
+FROM auth.external_identities AS ei
+JOIN auth.users AS u ON u.id = ei.user_id
+WHERE ei.provider = $1
+  AND ei.provider_subject = $2
+LIMIT 1
+`
+
+type GetUserByExternalIdentityParams struct {
+	Provider        string
+	ProviderSubject string
+}
+
+func (q *Queries) GetUserByExternalIdentity(ctx context.Context, arg GetUserByExternalIdentityParams) (AuthUser, error) {
+	row := q.db.QueryRow(ctx, getUserByExternalIdentity, arg.Provider, arg.ProviderSubject)
+	var i AuthUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.TgUsername,
+		&i.Name,
+		&i.Surname,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT
+    id,
+    username,
+    email,
+    tg_username,
+    name,
+    surname,
+    created_at,
+    updated_at
+FROM auth.users
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (AuthUser, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i AuthUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.TgUsername,
+		&i.Name,
+		&i.Surname,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserCredentialsByLogin = `-- name: GetUserCredentialsByLogin :one
 SELECT
     u.id,
@@ -237,6 +355,43 @@ func (q *Queries) GetUserCredentialsByLogin(ctx context.Context, username string
 	return i, err
 }
 
+const getUserPasswordByID = `-- name: GetUserPasswordByID :one
+SELECT user_id, password_hash
+FROM auth.user_passwords
+WHERE user_id = $1
+`
+
+type GetUserPasswordByIDRow struct {
+	UserID       pgtype.UUID
+	PasswordHash string
+}
+
+func (q *Queries) GetUserPasswordByID(ctx context.Context, userID pgtype.UUID) (GetUserPasswordByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordByID, userID)
+	var i GetUserPasswordByIDRow
+	err := row.Scan(&i.UserID, &i.PasswordHash)
+	return i, err
+}
+
+const revokeActiveRefreshSessionsByUserAgent = `-- name: RevokeActiveRefreshSessionsByUserAgent :exec
+UPDATE auth.refresh_sessions
+SET revoked_at = NOW()
+WHERE user_id = $1
+  AND user_agent IS NOT DISTINCT FROM $2
+  AND revoked_at IS NULL
+  AND expires_at > NOW()
+`
+
+type RevokeActiveRefreshSessionsByUserAgentParams struct {
+	UserID    pgtype.UUID
+	UserAgent pgtype.Text
+}
+
+func (q *Queries) RevokeActiveRefreshSessionsByUserAgent(ctx context.Context, arg RevokeActiveRefreshSessionsByUserAgentParams) error {
+	_, err := q.db.Exec(ctx, revokeActiveRefreshSessionsByUserAgent, arg.UserID, arg.UserAgent)
+	return err
+}
+
 const revokeRefreshSession = `-- name: RevokeRefreshSession :one
 UPDATE auth.refresh_sessions
 SET revoked_at = NOW()
@@ -256,9 +411,6 @@ type RevokeRefreshSessionRow struct {
 func (q *Queries) RevokeRefreshSession(ctx context.Context, tokenHash string) (RevokeRefreshSessionRow, error) {
 	row := q.db.QueryRow(ctx, revokeRefreshSession, tokenHash)
 	var i RevokeRefreshSessionRow
-	err := row.Scan(
-		&i.UserID,
-		&i.UserAgent,
-	)
+	err := row.Scan(&i.UserID, &i.UserAgent)
 	return i, err
 }

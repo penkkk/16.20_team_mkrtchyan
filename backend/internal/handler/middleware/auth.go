@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"opd/internal/handler/apierror"
 	"opd/internal/service/token"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,6 @@ import (
 )
 
 const (
-	errorKey             = "error"
 	unauthorizedMsg      = "unauthorized"
 	UserIDKey            = "userID"
 	redisBlackListPrefix = "auth:blacklist:"
@@ -23,35 +23,35 @@ func AuthMiddleware(tokens token.Manager, redisClient *redis.Client) gin.Handler
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{errorKey: unauthorizedMsg})
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
 			return
 		}
 		const prefix = "Bearer "
 		if !strings.HasPrefix(authHeader, prefix) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{errorKey: unauthorizedMsg})
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
 			return
 		}
 
 		accessToken := strings.TrimSpace(strings.TrimPrefix(authHeader, prefix))
 		if accessToken == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{errorKey: unauthorizedMsg})
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
 			return
 		}
 
 		claims, err := tokens.VerifyAccessToken(accessToken)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{errorKey: unauthorizedMsg})
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
 			return
 		}
 
 		key := redisBlackListPrefix + hashToken(accessToken)
 		exists, err := redisClient.Exists(c.Request.Context(), key).Result()
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{errorKey: "internal server error"})
+			apierror.Abort(c, http.StatusInternalServerError, "internal_server_error", "internal server error")
 			return
 		}
 		if exists > 0 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{errorKey: unauthorizedMsg})
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
 			return
 		}
 

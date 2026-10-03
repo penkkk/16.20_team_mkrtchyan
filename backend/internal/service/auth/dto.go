@@ -10,6 +10,7 @@ type LoginResult struct {
 	User             User
 	AccessToken      string
 	RefreshToken     string
+	ReturnURL        string
 	TokenType        string
 	ExpiresIn        int
 	RefreshExpiresIn int
@@ -36,4 +37,38 @@ type RegisterInput struct {
 type LogoutInput struct {
 	AccessToken    string
 	RefreshSession string
+}
+
+type StartOAuthInput struct {
+	Provider  string
+	ReturnURL string
+}
+
+type StartOAuthResult struct {
+	RedirectURL string
+	State       string
+	MaxAge      int
+}
+
+type StartOAuthLinkInput struct {
+	Provider  string
+	ReturnURL string
+	UserID    string
+}
+
+type CompleteOAuthInput struct {
+	Provider     string
+	Code         string
+	State        string
+	BrowserState string
+	UserAgent    string
+}
+
+type AddPasswordInput struct {
+	UserID   string
+	Password string
+}
+
+type MeInput struct {
+	UserID string
 }

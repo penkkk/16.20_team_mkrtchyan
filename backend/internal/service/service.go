@@ -16,6 +16,7 @@ func NewServices(
 	repositories *repository.Repositories,
 	tokens token.Manager,
 	redisClient *redis.Client,
+	oauthConfig authservice.OAuthConfig,
 ) *Services {
 	return &Services{
 		Auth: authservice.NewAuthService(
@@ -23,6 +24,7 @@ func NewServices(
 			repositories.TxManager,
 			tokens,
 			redisClient,
+			oauthConfig,
 		),
 	}
 }

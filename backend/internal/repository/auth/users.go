@@ -43,6 +43,10 @@ func (r *AuthPostgresRepository) CreateUserPassword(ctx context.Context, input C
 		PasswordHash: input.PasswordHash,
 	})
 	if err != nil {
+		if fields := userPasswordUniqueConstraintFields(err); len(fields) > 0 {
+			return UserPassword{}, NewUniqueConstraintError(fields...)
+		}
+
 		return UserPassword{}, err
 	}
 
@@ -62,12 +66,47 @@ func (r *AuthPostgresRepository) GetUserCredentialsByLogin(ctx context.Context, 
 	return userCredentialsFromDB(credentials), nil
 }
 
+func (r *AuthPostgresRepository) GetUserByID(ctx context.Context, input GetUserByIDInput) (User, error) {
+	userID, err := uuidFromString(input.UserID)
+	if err != nil {
+		return User{}, err
+	}
+
+	user, err := r.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+
+		return User{}, err
+	}
+
+	return userFromDB(user), nil
+}
+
 func (r *AuthPostgresRepository) FindUserConflicts(ctx context.Context, input FindUserConflictsInput) ([]string, error) {
 	return r.queries.FindUserConflicts(ctx, db.FindUserConflictsParams{
 		Username:   input.Username,
 		Email:      input.Email,
 		TgUsername: textFromStringPtr(input.TgUsername),
 	})
+}
+
+func (r *AuthPostgresRepository) GetUserPasswordByID(ctx context.Context, input GetPasswordByUserIDInput) error {
+	userID, err := uuidFromString(input.UserID)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.queries.GetUserPasswordByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+
+		return err
+	}
+	return nil
 }
 
 func userUniqueConstraintFields(err error) []string {
@@ -83,6 +122,20 @@ func userUniqueConstraintFields(err error) []string {
 		return []string{"email"}
 	case "users_tg_username_key":
 		return []string{"tg_username"}
+	default:
+		return nil
+	}
+}
+
+func userPasswordUniqueConstraintFields(err error) []string {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != uniqueViolationCode {
+		return nil
+	}
+
+	switch pgErr.ConstraintName {
+	case "user_passwords_user_id_uidx":
+		return []string{"user_id"}
 	default:
 		return nil
 	}

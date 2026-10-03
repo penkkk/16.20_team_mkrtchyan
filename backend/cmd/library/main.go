@@ -8,16 +8,30 @@ import (
 
 	"opd/internal/config"
 	authhandler "opd/internal/handler/auth"
+	"opd/internal/handler/middleware"
 	"opd/internal/repository"
 	"opd/internal/service"
+	authservice "opd/internal/service/auth"
 	token "opd/internal/service/token"
+
+	_ "opd/docs"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title Library API
+// @version 1.0
+// @description Library backend API.
+// @host localhost
+// @BasePath /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	_ = godotenv.Load()
 
@@ -55,15 +69,24 @@ func main() {
 
 	tokenManager := token.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, 15*time.Minute)
 	repositories := repository.NewRepositoriesWithTxManager(db)
-	services := service.NewServices(repositories, tokenManager, client)
+	services := service.NewServices(repositories, tokenManager, client, authservice.OAuthConfig{
+		GoogleClientID:     cfg.GoogleOAuthClientID,
+		YandexClientID:     cfg.YandexOAuthClientID,
+		AppPublicURL:       cfg.AppPublicURL,
+		YandexClientSecret: cfg.YandexOAuthClientSecret,
+		GoogleClientSecret: cfg.GoogleOAuthClientSecret,
+	})
 	authHandler := authhandler.NewHandler(services.Auth)
 
 	router := gin.Default()
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	authRequired := middleware.AuthMiddleware(tokenManager, client)
 
 	api := router.Group("/api")
 	{
 		v1 := api.Group("/v1")
-		authHandler.RegisterRoutes(v1)
+		authHandler.RegisterRoutes(v1, authRequired)
 	}
 
 	router.GET("/ping", func(c *gin.Context) {

@@ -7,12 +7,17 @@ import (
 )
 
 type Config struct {
-	HTTPPort    string
-	DataBaseURL string
-	JWTSecret   string
-	JWTIssuer   string
-	JWTAudience string
-	RedisURL    string
+	HTTPPort                string
+	AppPublicURL            string
+	DataBaseURL             string
+	JWTSecret               string
+	JWTIssuer               string
+	JWTAudience             string
+	RedisURL                string
+	GoogleOAuthClientID     string
+	YandexOAuthClientID     string
+	YandexOAuthClientSecret string
+	GoogleOAuthClientSecret string
 }
 
 func Load() (Config, error) {
@@ -34,12 +39,17 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		HTTPPort:    httpPort,
-		DataBaseURL: os.Getenv("DATABASE_URL"),
-		RedisURL:    os.Getenv("REDIS_URL"),
-		JWTSecret:   jwtSecret,
-		JWTIssuer:   jwtIssuer,
-		JWTAudience: jwtAudience,
+		HTTPPort:                httpPort,
+		AppPublicURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")), "/"),
+		DataBaseURL:             os.Getenv("DATABASE_URL"),
+		RedisURL:                os.Getenv("REDIS_URL"),
+		JWTSecret:               jwtSecret,
+		JWTIssuer:               jwtIssuer,
+		JWTAudience:             jwtAudience,
+		GoogleOAuthClientID:     strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")),
+		YandexOAuthClientID:     strings.TrimSpace(os.Getenv("YANDEX_CLIENT_ID")),
+		GoogleOAuthClientSecret: strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET")),
+		YandexOAuthClientSecret: strings.TrimSpace(os.Getenv("YANDEX_CLIENT_SECRET")),
 	}, nil
 }
 

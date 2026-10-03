@@ -30,6 +30,14 @@ type FindUserConflictsInput struct {
 	Email      string
 }
 
+type GetUserByIDInput struct {
+	UserID string
+}
+
+type GetPasswordByUserIDInput struct {
+	UserID string
+}
+
 type UserPassword struct {
 	ID           string
 	UserID       string
@@ -68,4 +76,21 @@ type CreateRefreshSessionInput struct {
 	IP        *netip.Addr
 	UserID    string
 	TokenHash string
+}
+
+type ExternalIdentity struct {
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ID               string
+	UserID           string
+	Provider         string
+	ProviderSubject  string
+	ProviderUsername string
+}
+
+type CreateExternalIdentityInput struct {
+	ProviderUsername *string
+	UserID           string
+	Provider         string
+	ProviderSubject  string
 }

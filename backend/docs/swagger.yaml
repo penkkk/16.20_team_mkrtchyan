@@ -1,0 +1,453 @@
+basePath: /api/v1
+definitions:
+  apierror.Detail:
+    properties:
+      field:
+        example: username
+        type: string
+      message:
+        example: User with this username already exists.
+        type: string
+    type: object
+  apierror.Error:
+    properties:
+      code:
+        example: invalid_request
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/apierror.Detail'
+        type: array
+      message:
+        example: Request is invalid.
+        type: string
+    type: object
+  apierror.Response:
+    properties:
+      error:
+        $ref: '#/definitions/apierror.Error'
+    type: object
+  auth.AddPasswordRequest:
+    properties:
+      password:
+        type: string
+    required:
+    - password
+    type: object
+  auth.ExternalLinkResponse:
+    properties:
+      redirect_url:
+        type: string
+    type: object
+  auth.LoginRequest:
+    properties:
+      login:
+        type: string
+      password:
+        type: string
+    required:
+    - login
+    - password
+    type: object
+  auth.LoginResponse:
+    properties:
+      accessToken:
+        type: string
+      expiresIn:
+        type: integer
+      refreshExpiresIn:
+        type: integer
+      tokenType:
+        type: string
+      user:
+        $ref: '#/definitions/auth.UserResponse'
+    type: object
+  auth.RefreshResponse:
+    properties:
+      accessToken:
+        type: string
+      expiresIn:
+        type: integer
+      refreshExpiresIn:
+        type: integer
+      tokenType:
+        type: string
+    type: object
+  auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+      surname:
+        type: string
+      tg_username:
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - name
+    - password
+    - surname
+    - username
+    type: object
+  auth.UserResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      surname:
+        type: string
+      tg_username:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost
+info:
+  contact: {}
+  description: Library backend API.
+  title: Library API
+  version: "1.0"
+paths:
+  /auth/{provider}/callback:
+    get:
+      description: Completes an OAuth flow, sets session cookies when authentication
+        succeeds, and redirects to the return URL.
+      parameters:
+      - description: OAuth provider
+        enum:
+        - google
+        - yandex
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: OAuth authorization code
+        in: query
+        name: code
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        type: string
+      - description: OAuth provider error code
+        in: query
+        name: error
+        type: string
+      - description: OAuth provider error description
+        in: query
+        name: error_description
+        type: string
+      - description: oauth_state cookie
+        in: header
+        name: Cookie
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Found
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      summary: Complete OAuth
+      tags:
+      - auth
+  /auth/{provider}/link/start:
+    get:
+      description: Creates an OAuth authorization URL for linking an external provider
+        to the authenticated user.
+      parameters:
+      - description: OAuth provider
+        enum:
+        - google
+        - yandex
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: URL to redirect to after successful OAuth callback
+        in: query
+        name: return_url
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.ExternalLinkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      security:
+      - BearerAuth: []
+      summary: Start OAuth linking
+      tags:
+      - auth
+  /auth/{provider}/start:
+    get:
+      description: Starts an OAuth flow for the selected provider and redirects to
+        the provider authorization page.
+      parameters:
+      - description: OAuth provider
+        enum:
+        - google
+        - yandex
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: URL to redirect to after successful OAuth callback
+        in: query
+        name: return_url
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Found
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      summary: Start OAuth
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns access and refresh token metadata.
+        Refresh token is also set as an HTTP-only cookie.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      summary: Login
+      tags:
+      - auth
+  /auth/logout:
+    delete:
+      description: Invalidates the current refresh session and blacklists the access
+        token when it is provided.
+      parameters:
+      - description: refresh_token cookie
+        in: header
+        name: Cookie
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      security:
+      - BearerAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/password:
+    post:
+      consumes:
+      - application/json
+      description: Adds a password to the authenticated user when password authentication
+        is not configured yet.
+      parameters:
+      - description: Password data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.AddPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      security:
+      - BearerAuth: []
+      summary: Add password
+      tags:
+      - auth
+  /auth/refresh:
+    get:
+      description: Issues a new access token using the refresh token cookie.
+      parameters:
+      - description: refresh_token cookie
+        in: header
+        name: Cookie
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.RefreshResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      security:
+      - BearerAuth: []
+      summary: Refresh tokens
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a user and returns access and refresh token metadata. Refresh
+        token is also set as an HTTP-only cookie.
+      parameters:
+      - description: Registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      summary: Register
+      tags:
+      - auth
+  /me:
+    get:
+      description: Returns the authenticated user's profile.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/apierror.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apierror.Response'
+      security:
+      - BearerAuth: []
+      summary: Current user
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
