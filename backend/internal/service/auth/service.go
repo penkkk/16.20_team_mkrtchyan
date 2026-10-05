@@ -17,7 +17,8 @@ type AuthService interface {
 	Logout(ctx context.Context, input LogoutInput) error
 	Refresh(ctx context.Context, input LogoutInput) (RefreshResult, error)
 	StartOAuth(ctx context.Context, input StartOAuthInput) (StartOAuthResult, error)
-	CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (LoginResult, error)
+	CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (CompleteOAuthResult, error)
+	CompleteOAuthRegistration(ctx context.Context, input CompleteOAuthRegistrationInput) (LoginResult, error)
 	StartOAuthLink(ctx context.Context, input StartOAuthLinkInput) (StartOAuthResult, error)
 	AddPassword(ctx context.Context, input AddPasswordInput) error
 	Me(ctx context.Context, input MeInput) (User, error)

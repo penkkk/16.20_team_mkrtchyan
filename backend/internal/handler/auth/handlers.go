@@ -14,8 +14,9 @@ import (
 
 const (
 	refreshTokenCookieName = "refresh_token"
-	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec
+	authCookiePath         = "/api/v1/auth" //nolint:gosec
 	oauthStateCookieName   = "oauth_state"
+	oauthPendingCookieName = "oauth_pending"
 	internalServerErrorMsg = "internal server error"
 	bearerTokenPrefix      = "Bearer "
 )
@@ -54,7 +55,7 @@ func (h *Handler) login(c *gin.Context) {
 		return
 	}
 
-	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAuthCookie(c, refreshTokenCookieName, result.RefreshToken, result.RefreshExpiresIn)
 	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
 	c.JSON(http.StatusOK, loginResponseFromService(result))
 }
@@ -86,7 +87,7 @@ func (h *Handler) logout(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidRefreshSession):
-			clearRefreshTokenCookie(c)
+			clearAuthCookie(c, refreshTokenCookieName)
 			apierror.Respond(c, http.StatusUnauthorized, "invalid_refresh_session", "Invalid refresh session.")
 		default:
 			respondInternalServerError(c)
@@ -94,7 +95,7 @@ func (h *Handler) logout(c *gin.Context) {
 		return
 	}
 
-	clearRefreshTokenCookie(c)
+	clearAuthCookie(c, refreshTokenCookieName)
 	c.Status(http.StatusNoContent)
 }
 
@@ -139,7 +140,7 @@ func (h *Handler) register(c *gin.Context) {
 		return
 	}
 
-	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAuthCookie(c, refreshTokenCookieName, result.RefreshToken, result.RefreshExpiresIn)
 	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
 	c.JSON(http.StatusCreated, loginResponseFromService(result))
 }
@@ -171,7 +172,7 @@ func (h *Handler) refresh(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, authservice.ErrInvalidRefreshSession):
-			clearRefreshTokenCookie(c)
+			clearAuthCookie(c, refreshTokenCookieName)
 			apierror.Respond(c, http.StatusUnauthorized, "invalid_refresh_session", "Invalid refresh session.")
 		default:
 			respondInternalServerError(c)
@@ -179,7 +180,7 @@ func (h *Handler) refresh(c *gin.Context) {
 		return
 	}
 
-	setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+	setAuthCookie(c, refreshTokenCookieName, result.RefreshToken, result.RefreshExpiresIn)
 	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
 	c.JSON(http.StatusOK, refreshResponseFromService(result))
 }
@@ -220,7 +221,7 @@ func (h *Handler) startOAuth(c *gin.Context) {
 		return
 	}
 
-	setOAuthStateCookie(c, result.State, result.MaxAge)
+	setAuthCookie(c, oauthStateCookieName, result.State, result.MaxAge)
 	c.Redirect(http.StatusFound, result.RedirectURL)
 }
 
@@ -247,7 +248,7 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 	state := c.Query("state")
 	providerError := c.Query("error")
 	if providerError != "" {
-		clearOAuthStateCookie(c)
+		clearAuthCookie(c, oauthStateCookieName)
 		apierror.Respond(
 			c,
 			http.StatusBadRequest,
@@ -261,7 +262,7 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 
 	browserState, err := c.Cookie(oauthStateCookieName)
 	if err != nil {
-		clearOAuthStateCookie(c)
+		clearAuthCookie(c, oauthStateCookieName)
 		apierror.Respond(c, http.StatusBadRequest, "oauth_state_missing", "OAuth state is missing.")
 		return
 	}
@@ -274,14 +275,21 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 		UserAgent:    c.Request.UserAgent(),
 	})
 	if err != nil {
-		clearOAuthStateCookie(c)
+		clearAuthCookie(c, oauthStateCookieName)
 		respondOAuthCallbackError(c, err)
 		return
 	}
 
-	clearOAuthStateCookie(c)
+	clearAuthCookie(c, oauthStateCookieName)
+
+	if result.PendingToken != "" {
+		setAuthCookie(c, oauthPendingCookieName, result.PendingToken, int(authservice.OAuthAttemptTTL.Seconds()))
+		c.Redirect(http.StatusFound, "/register?oauth=choose-username")
+		return
+	}
+
 	if result.RefreshToken != "" {
-		setRefreshTokenCookie(c, result.RefreshToken, result.RefreshExpiresIn)
+		setAuthCookie(c, refreshTokenCookieName, result.RefreshToken, result.RefreshExpiresIn)
 	}
 	if result.AccessToken != "" {
 		setAccessTokenHeader(c, result.TokenType, result.AccessToken)
@@ -290,6 +298,61 @@ func (h *Handler) oauthCallback(c *gin.Context) {
 		result.ReturnURL = "/"
 	}
 	c.Redirect(http.StatusFound, result.ReturnURL)
+}
+
+// completeOAuthRegistration godoc
+// @Summary Complete OAuth registration
+// @Description Creates a user from a pending OAuth registration after the user chooses a username.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body CompleteOAuthRegistrationRequest true "Username"
+// @Param Cookie header string true "oauth_pending cookie"
+// @Success 201 {object} LoginResponse
+// @Failure 400 {object} apierror.Response
+// @Failure 409 {object} apierror.Response
+// @Failure 500 {object} apierror.Response
+// @Router /auth/oauth/complete [post]
+func (h *Handler) completeOAuthRegistration(c *gin.Context) {
+	pendingToken, err := c.Cookie(oauthPendingCookieName)
+	if err != nil {
+		apierror.Respond(c, http.StatusBadRequest, "oauth_registration_not_found", "OAuth registration has expired. Start again.")
+		return
+	}
+
+	var req CompleteOAuthRegistrationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	result, err := h.service.CompleteOAuthRegistration(c.Request.Context(), authservice.CompleteOAuthRegistrationInput{
+		PendingToken: pendingToken,
+		Username:     req.Username,
+		UserAgent:    c.Request.UserAgent(),
+	})
+	if err != nil {
+		var conflictErr *authservice.FieldConflictError
+		switch {
+		case errors.Is(err, authservice.ErrOAuthPendingRegistrationNotFound):
+			clearAuthCookie(c, oauthPendingCookieName)
+			apierror.Respond(c, http.StatusBadRequest, "oauth_registration_not_found", "OAuth registration has expired. Start again.")
+		case errors.As(err, &conflictErr):
+			code, message, details := fieldConflictError(conflictErr.Fields)
+			apierror.Respond(c, http.StatusConflict, code, message, details...)
+		case errors.Is(err, authservice.ErrOAuthIdentityAlreadyLinked):
+			clearAuthCookie(c, oauthPendingCookieName)
+			apierror.Respond(c, http.StatusConflict, "oauth_identity_already_linked", "OAuth identity is already linked.")
+		default:
+			respondInternalServerError(c)
+		}
+		return
+	}
+
+	clearAuthCookie(c, oauthPendingCookieName)
+	setAuthCookie(c, refreshTokenCookieName, result.RefreshToken, result.RefreshExpiresIn)
+	setAccessTokenHeader(c, result.TokenType, result.AccessToken)
+	c.JSON(http.StatusCreated, loginResponseFromService(result))
 }
 
 func respondOAuthCallbackError(c *gin.Context, err error) {
@@ -361,7 +424,7 @@ func (h *Handler) linkExternal(c *gin.Context) {
 		return
 	}
 
-	setOAuthStateCookie(c, result.State, result.MaxAge)
+	setAuthCookie(c, oauthStateCookieName, result.State, result.MaxAge)
 	c.JSON(http.StatusOK, ExternalLinkResponse{
 		RedirectURL: result.RedirectURL,
 	})
@@ -497,52 +560,26 @@ func bearerTokenFromHeader(c *gin.Context) (string, bool) {
 	return accessToken, true
 }
 
-func setRefreshTokenCookie(c *gin.Context, refreshToken string, maxAge int) {
+func clearAuthCookie(c *gin.Context, cookieName string) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
-		refreshTokenCookieName,
-		refreshToken,
-		maxAge,
-		refreshTokenCookiePath,
-		"",
-		secureCookie(c),
-		true,
-	)
-}
-
-func clearRefreshTokenCookie(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(
-		refreshTokenCookieName,
+		cookieName,
 		"",
 		-1,
-		refreshTokenCookiePath,
+		authCookiePath,
 		"",
 		secureCookie(c),
 		true,
 	)
 }
 
-func setOAuthStateCookie(c *gin.Context, state string, maxAge int) {
+func setAuthCookie(c *gin.Context, cookieName string, value string, maxAge int) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
-		oauthStateCookieName,
-		state,
+		cookieName,
+		value,
 		maxAge,
-		refreshTokenCookiePath,
-		"",
-		secureCookie(c),
-		true,
-	)
-}
-
-func clearOAuthStateCookie(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(
-		oauthStateCookieName,
-		"",
-		-1,
-		refreshTokenCookiePath,
+		authCookiePath,
 		"",
 		secureCookie(c),
 		true,
