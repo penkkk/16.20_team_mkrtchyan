@@ -66,7 +66,7 @@ export function LoginPage() {
             <Sparkles className="size-4 text-(--itlib-ice)" aria-hidden="true" />
             ITLib
           </div>
-          <h1 className="max-w-lg text-5xl leading-tight font-medium text-(--itlib-ice)">
+          <h1 className="glass-heading max-w-lg text-5xl leading-tight font-medium">
             Библиотека с IT книгами для учебы и командной работы.
           </h1>
           <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">

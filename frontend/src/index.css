@@ -33,6 +33,9 @@
 }
 
 @utility glass-auth-card {
+  position: relative;
+  isolation: isolate;
+
   background:
     linear-gradient(135deg, rgb(255 255 255 / 10%), rgb(255 255 255 / 2%)),
     var(--itlib-auth-glass-bg);
@@ -40,4 +43,60 @@
   box-shadow: var(--itlib-auth-glass-shadow);
   backdrop-filter: blur(26px) saturate(150%);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgb(225 242 255 / 30%),
+    inset 0 24px 64px rgb(182 217 252 / 8%),
+    0 24px 60px rgb(0 0 0 / 42%);
+}
+
+.glass-auth-card::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -72px -56px;
+  border-radius: inherit;
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      ellipse at 70% 20%,
+      rgb(182 217 252 / 42%) 0%,
+      rgb(2 125 234 / 20%) 42%,
+      rgb(11 66 140 / 10%) 66%,
+      transparent 88%
+    );
+  filter: blur(44px);
+  opacity: 0.82;
+}
+
+@utility glass-heading {
+  color: transparent;
+  background:
+    linear-gradient(
+      120deg,
+      rgb(255 255 255 / 92%) 0%,
+      rgb(185 211 255 / 58%) 42%,
+      rgb(224 239 255 / 88%) 72%,
+      rgb(156 184 241 / 52%) 100%
+    );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px rgb(224 239 255 / 12%);
+  text-shadow:
+    0 1px 0 rgb(255 255 255 / 20%),
+    0 10px 28px rgb(109 146 255 / 18%);
+}
+
+.auth-background::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background-image:
+    linear-gradient(rgb(182 217 252 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(182 217 252 / 4%) 1px, transparent 1px);
+  background-size: 48px 48px;
+
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 55%), transparent 75%);
 }
