@@ -1,9 +1,10 @@
-import { Navigate, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { HomePage } from '@/features/home/ui/home-page'
 
 export const Route = createFileRoute('/')({
   component: IndexRoute,
 })
 
 function IndexRoute() {
-  return <Navigate replace to="/login" />
+  return <HomePage />
 }
