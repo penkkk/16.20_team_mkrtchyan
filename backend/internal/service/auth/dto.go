@@ -17,8 +17,8 @@ type LoginResult struct {
 }
 
 type CompleteOAuthResult struct {
-	LoginResult
 	PendingToken string
+	LoginResult
 }
 
 type RefreshResult struct {

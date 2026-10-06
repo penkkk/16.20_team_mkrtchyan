@@ -321,8 +321,8 @@ func (h *Handler) completeOAuthRegistration(c *gin.Context) {
 	}
 
 	var req CompleteOAuthRegistrationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		respondValidationError(c, err)
+	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+		respondValidationError(c, bindErr)
 		return
 	}
 
