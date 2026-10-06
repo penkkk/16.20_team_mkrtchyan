@@ -16,6 +16,11 @@ type LoginResult struct {
 	RefreshExpiresIn int
 }
 
+type CompleteOAuthResult struct {
+	PendingToken string
+	LoginResult
+}
+
 type RefreshResult struct {
 	AccessToken      string
 	RefreshToken     string
@@ -61,6 +66,12 @@ type CompleteOAuthInput struct {
 	Code         string
 	State        string
 	BrowserState string
+	UserAgent    string
+}
+
+type CompleteOAuthRegistrationInput struct {
+	PendingToken string
+	Username     string
 	UserAgent    string
 }
 

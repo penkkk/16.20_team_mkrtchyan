@@ -10,6 +10,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup, authRequired gin.Handl
 	auth.POST("/login", h.login)
 	auth.DELETE("/logout", h.logout)
 	auth.POST("/register", h.register)
+	auth.POST("/oauth/complete", h.completeOAuthRegistration)
 	auth.GET("/refresh", h.refresh)
 	auth.GET("/:provider/start", h.startOAuth)
 	auth.GET("/:provider/callback", h.oauthCallback)

@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	OAuthProviderGoogle = "google"
-	OAuthProviderYandex = "yandex"
-	OAuthModeLogin      = "login"
-	OAuthModeLink       = "link"
-	OAuthRedisKey       = "auth:oauth:"
-	OAuthAttemptTTL     = 10 * time.Minute
+	OAuthProviderGoogle              = "google"
+	OAuthProviderYandex              = "yandex"
+	OAuthModeLogin                   = "login"
+	OAuthModeLink                    = "link"
+	OAuthRedisKey                    = "auth:oauth:"
+	PendingOAuthRegistrationRedisKey = "auth:oauth:pending:"
+	OAuthAttemptTTL                  = 10 * time.Minute
 )
 
 type OAuthProvider interface {
@@ -97,6 +98,16 @@ type OAuthAttempt struct {
 	UserID       string `json:"user_id,omitempty"`
 }
 
+type PendingOAuthRegistration struct {
+	Provider          string
+	ProviderSubject   string
+	Email             string
+	Name              string
+	Surname           string
+	SuggestedUsername string
+	ReturnURL         string
+}
+
 func (s *authService) StartOAuth(ctx context.Context, input StartOAuthInput) (StartOAuthResult, error) {
 	return s.startOAuthAttempt(ctx, input.Provider, input.ReturnURL, OAuthModeLogin, "")
 }
@@ -108,29 +119,29 @@ func (s *authService) StartOAuthLink(ctx context.Context, input StartOAuthLinkIn
 	return s.startOAuthAttempt(ctx, input.Provider, input.ReturnURL, OAuthModeLink, input.UserID)
 }
 
-func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (LoginResult, error) {
+func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInput) (CompleteOAuthResult, error) {
 	provider, ok := s.oauth.Get(input.Provider)
 	if !ok {
-		return LoginResult{}, ErrUnsupportedOAuthProvider
+		return CompleteOAuthResult{}, ErrUnsupportedOAuthProvider
 	}
 
 	if input.Code == "" {
-		return LoginResult{}, ErrOAuthCodeRequired
+		return CompleteOAuthResult{}, ErrOAuthCodeRequired
 	}
 	if input.State == "" || input.BrowserState == "" || input.State != input.BrowserState {
-		return LoginResult{}, ErrOAuthStateInvalid
+		return CompleteOAuthResult{}, ErrOAuthStateInvalid
 	}
 
 	attempt, err := s.getOAuthAttempt(ctx, input.State)
 	if err != nil {
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 	defer func() {
 		_ = s.deleteOAuthAttempt(ctx, input.State)
 	}()
 
 	if attempt.Provider != provider.Name() {
-		return LoginResult{}, ErrOAuthProviderMismatch
+		return CompleteOAuthResult{}, ErrOAuthProviderMismatch
 	}
 	redirectURI := s.oauthCallbackURL(input.Provider)
 	tokens, err := provider.ExchangeCode(ctx, OAuthExchangeCodeInput{
@@ -139,12 +150,12 @@ func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInpu
 		CodeVerifier: attempt.CodeVerifier,
 	})
 	if err != nil {
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 
 	profile, err := provider.FetchUser(ctx, tokens, attempt.Nonce)
 	if err != nil {
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 
 	switch attempt.Mode {
@@ -153,7 +164,7 @@ func (s *authService) CompleteOAuth(ctx context.Context, input CompleteOAuthInpu
 	case OAuthModeLink:
 		return s.completeOAuthLink(ctx, attempt, profile)
 	default:
-		return LoginResult{}, ErrOAuthStateInvalid
+		return CompleteOAuthResult{}, ErrOAuthStateInvalid
 	}
 }
 
@@ -162,24 +173,27 @@ func (s *authService) completeOAuthLogin(
 	input CompleteOAuthInput,
 	attempt OAuthAttempt,
 	profile OAuthProfile,
-) (LoginResult, error) {
+) (CompleteOAuthResult, error) {
 	user, err := s.repo.GetUserByExternalIdentity(ctx, profile.Provider, profile.ProviderUserID)
 	if err == nil {
-		result, innerErr := s.issueLoginResult(ctx, s.repo, user, input.UserAgent)
+		loginResult, innerErr := s.issueLoginResult(ctx, s.repo, user, input.UserAgent)
 		if innerErr != nil {
-			return LoginResult{}, innerErr
+			return CompleteOAuthResult{}, innerErr
 		}
 
-		result.ReturnURL = attempt.ReturnURL
-		return result, nil
+		loginResult.ReturnURL = attempt.ReturnURL
+		return CompleteOAuthResult{LoginResult: loginResult}, nil
 	}
 	if !errors.Is(err, authrepo.ErrNotFound) {
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 
 	err = s.validateNewOAuthUser(ctx, profile)
 	if err != nil {
-		return LoginResult{}, err
+		if errors.Is(err, ErrOAuthUsernameAlreadyUsed) {
+			return s.createPendingOAuthRegistration(ctx, profile, attempt.ReturnURL)
+		}
+		return CompleteOAuthResult{}, err
 	}
 
 	var result LoginResult
@@ -213,35 +227,35 @@ func (s *authService) completeOAuthLogin(
 		var uniqueErr *authrepo.UniqueConstraintError
 		if errors.As(err, &uniqueErr) {
 			if containsString(uniqueErr.Fields, "email") {
-				return LoginResult{}, ErrOAuthEmailAlreadyUsed
+				return CompleteOAuthResult{}, ErrOAuthEmailAlreadyUsed
 			}
 			if containsString(uniqueErr.Fields, "username") {
-				return LoginResult{}, ErrOAuthUsernameRequired
+				return s.createPendingOAuthRegistration(ctx, profile, attempt.ReturnURL)
 			}
 		}
 
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 
 	result.ReturnURL = attempt.ReturnURL
-	return result, nil
+	return CompleteOAuthResult{LoginResult: result}, nil
 }
 
-func (s *authService) completeOAuthLink(ctx context.Context, attempt OAuthAttempt, profile OAuthProfile) (LoginResult, error) {
+func (s *authService) completeOAuthLink(ctx context.Context, attempt OAuthAttempt, profile OAuthProfile) (CompleteOAuthResult, error) {
 	if attempt.UserID == "" {
-		return LoginResult{}, ErrOAuthStateInvalid
+		return CompleteOAuthResult{}, ErrOAuthStateInvalid
 	}
 
 	user, err := s.repo.GetUserByExternalIdentity(ctx, profile.Provider, profile.ProviderUserID)
 	if err == nil {
 		if user.ID == attempt.UserID {
-			return LoginResult{ReturnURL: attempt.ReturnURL}, nil
+			return CompleteOAuthResult{LoginResult: LoginResult{ReturnURL: attempt.ReturnURL}}, nil
 		}
 
-		return LoginResult{}, ErrOAuthIdentityAlreadyLinked
+		return CompleteOAuthResult{}, ErrOAuthIdentityAlreadyLinked
 	}
 	if !errors.Is(err, authrepo.ErrNotFound) {
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 
 	_, err = s.repo.CreateExternalIdentity(ctx, authrepo.CreateExternalIdentityInput{
@@ -254,17 +268,17 @@ func (s *authService) completeOAuthLink(ctx context.Context, attempt OAuthAttemp
 		var uniqueErr *authrepo.UniqueConstraintError
 		if errors.As(err, &uniqueErr) {
 			if containsString(uniqueErr.Fields, "provider_subject") {
-				return LoginResult{}, ErrOAuthIdentityAlreadyLinked
+				return CompleteOAuthResult{}, ErrOAuthIdentityAlreadyLinked
 			}
 			if containsString(uniqueErr.Fields, "provider") {
-				return LoginResult{}, ErrOAuthProviderAlreadyLinked
+				return CompleteOAuthResult{}, ErrOAuthProviderAlreadyLinked
 			}
 		}
 
-		return LoginResult{}, err
+		return CompleteOAuthResult{}, err
 	}
 
-	return LoginResult{ReturnURL: attempt.ReturnURL}, nil
+	return CompleteOAuthResult{LoginResult: LoginResult{ReturnURL: attempt.ReturnURL}}, nil
 }
 
 func (s *authService) startOAuthAttempt(
@@ -377,13 +391,17 @@ func (s *authService) validateNewOAuthUser(ctx context.Context, profile OAuthPro
 		return ErrOAuthEmailAlreadyUsed
 	}
 	if containsString(conflicts, "username") {
-		return ErrOAuthUsernameRequired
+		return ErrOAuthUsernameAlreadyUsed
 	}
 
 	return nil
 }
 
-func (s *authService) issueLoginResult(ctx context.Context, repo authRepository, user authrepo.User, userAgent string) (LoginResult, error) {
+func (s *authService) issueLoginResult(
+	ctx context.Context, repo authRepository,
+	user authrepo.User,
+	userAgent string,
+) (LoginResult, error) {
 	tokenPair, err := s.tokens.IssueTokenPair(user.ID, userAgent)
 	if err != nil {
 		return LoginResult{}, err
@@ -462,6 +480,135 @@ func (s *authService) safeOAuthReturnURL(rawReturnURL string) string {
 	}
 
 	return "/"
+}
+
+func (s *authService) savePendingOAuthRegistration(
+	ctx context.Context,
+	token string,
+	register PendingOAuthRegistration,
+) error {
+	data, err := json.Marshal(register)
+	if err != nil {
+		return err
+	}
+
+	return s.redisClient.Set(ctx, PendingOAuthRegistrationRedisKey+token, data, OAuthAttemptTTL).Err()
+}
+
+func (s *authService) createPendingOAuthRegistration(
+	ctx context.Context,
+	profile OAuthProfile,
+	returnURL string,
+) (CompleteOAuthResult, error) {
+	pendingToken, err := randomURLSafe(32)
+	if err != nil {
+		return CompleteOAuthResult{}, err
+	}
+
+	err = s.savePendingOAuthRegistration(ctx, pendingToken, PendingOAuthRegistration{
+		Provider:          profile.Provider,
+		ProviderSubject:   profile.ProviderUserID,
+		Email:             profile.Email,
+		Name:              profile.FirstName,
+		Surname:           profile.LastName,
+		SuggestedUsername: profile.UsernameHint,
+		ReturnURL:         returnURL,
+	})
+	if err != nil {
+		return CompleteOAuthResult{}, err
+	}
+
+	return CompleteOAuthResult{PendingToken: pendingToken}, nil
+}
+
+func (s *authService) getPendingOAuthRegistration(ctx context.Context, token string) (PendingOAuthRegistration, error) {
+	data, err := s.redisClient.Get(ctx, PendingOAuthRegistrationRedisKey+token).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return PendingOAuthRegistration{}, ErrOAuthPendingRegistrationNotFound
+		}
+
+		return PendingOAuthRegistration{}, err
+	}
+
+	var registration PendingOAuthRegistration
+	if err := json.Unmarshal(data, &registration); err != nil {
+		return PendingOAuthRegistration{}, err
+	}
+
+	return registration, nil
+}
+
+func (s *authService) deletePendingOAuthRegistration(ctx context.Context, token string) error {
+	return s.redisClient.Del(ctx, PendingOAuthRegistrationRedisKey+token).Err()
+}
+
+func (s *authService) CompleteOAuthRegistration(
+	ctx context.Context,
+	input CompleteOAuthRegistrationInput,
+) (LoginResult, error) {
+	input.PendingToken = strings.TrimSpace(input.PendingToken)
+	input.Username = strings.TrimSpace(input.Username)
+	if input.PendingToken == "" || input.Username == "" {
+		return LoginResult{}, ErrOAuthPendingRegistrationNotFound
+	}
+
+	registration, err := s.getPendingOAuthRegistration(ctx, input.PendingToken)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	conflicts, err := s.repo.FindUserConflicts(ctx, authrepo.FindUserConflictsInput{
+		Username: input.Username,
+		Email:    registration.Email,
+	})
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if len(conflicts) > 0 {
+		return LoginResult{}, NewFieldConflictError(conflicts)
+	}
+
+	var result LoginResult
+	err = s.txManager.WithinTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(repositories *repository.Repositories) error {
+		user, innerErr := repositories.Auth.CreateUser(ctx, authrepo.CreateUserInput{
+			Username: input.Username,
+			Email:    registration.Email,
+			Name:     registration.Name,
+			Surname:  registration.Surname,
+		})
+		if innerErr != nil {
+			return innerErr
+		}
+
+		_, innerErr = repositories.Auth.CreateExternalIdentity(ctx, authrepo.CreateExternalIdentityInput{
+			UserID:           user.ID,
+			Provider:         registration.Provider,
+			ProviderSubject:  registration.ProviderSubject,
+			ProviderUsername: stringPtrFromString(registration.SuggestedUsername),
+		})
+		if innerErr != nil {
+			return innerErr
+		}
+
+		result, innerErr = s.issueLoginResult(ctx, repositories.Auth, user, input.UserAgent)
+		return innerErr
+	})
+	if err != nil {
+		var uniqueErr *authrepo.UniqueConstraintError
+		if errors.As(err, &uniqueErr) {
+			if containsString(uniqueErr.Fields, "provider_subject") {
+				return LoginResult{}, ErrOAuthIdentityAlreadyLinked
+			}
+
+			return LoginResult{}, NewFieldConflictError(uniqueErr.Fields)
+		}
+
+		return LoginResult{}, err
+	}
+
+	_ = s.deletePendingOAuthRegistration(ctx, input.PendingToken)
+	return result, nil
 }
 
 func randomURLSafe(byteLength int) (string, error) {
