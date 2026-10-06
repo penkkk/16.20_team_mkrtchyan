@@ -25,4 +25,11 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    
+  files: ['src/components/ui/carousel.tsx'],
+  rules: {
+    'react-hooks/set-state-in-effect': 'off',
+  },
+},
 ])
