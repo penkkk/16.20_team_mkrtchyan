@@ -12,7 +12,7 @@ const navigationItems = [
 
 export function HomeHeader() {
   return (
-    <header className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6">
+    <header className="absolute inset-x-0 top-0 z-20 mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6">
       <div className="glass-header flex min-h-14 items-center justify-between gap-3 rounded-3xl border border-border bg-[rgb(5_6_15_/_58%)] px-3 shadow-[inset_0_1px_0_rgb(216_236_248_/_10%),0_16px_40px_rgb(0_0_0_/_24%)] backdrop-blur-xl sm:min-h-16 sm:px-5">
         <Link
           className="flex items-center gap-3 rounded-lg text-sm font-semibold text-foreground outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"

@@ -5,7 +5,7 @@ const quickTopics = ['React', 'Python', 'DevOps', 'Алгоритмы', 'Баз�
 
 export function HomeHero() {
   return (
-    <section className="mx-auto flex flex-col min-h-[calc(100svh-104px)] max-w-6xl items-center justify-center px-6 pb-24 pt-12 text-center sm:px-10">
+    <section className="relative z-10 mx-auto flex min-h-svh max-w-6xl flex-col items-center justify-center px-6 pb-24 pt-28 text-center sm:px-10">
       <h1 className="glass-heading max-w-5xl text-balance text-5xl leading-[0.98] font-medium sm:text-6xl lg:text-7xl">
         Ваша библиотека знаний в мире IT
       </h1>

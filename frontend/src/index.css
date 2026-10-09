@@ -13,6 +13,7 @@
 
   html {
     @apply font-sans;
+    @apply scroll-smooth;
   }
 
   body {
@@ -116,8 +117,27 @@
     auto;
 }
 
+.home-background::before {
+  position: absolute;
+  z-index: 0;
+  inset: -10% -20% 8%;
+  content: '';
+  pointer-events: none;
+
+  background:
+    linear-gradient(119deg, transparent 31%, rgb(124 194 255 / 34%) 45%, transparent 59%),
+    linear-gradient(83deg, transparent 36%, rgb(81 145 255 / 28%) 48%, transparent 61%),
+    linear-gradient(142deg, transparent 43%, rgb(205 233 255 / 23%) 52%, transparent 62%);
+  filter: blur(18px);
+  mask-image: radial-gradient(ellipse 75% 68% at 50% 12%, #000 0%, rgb(0 0 0 / 82%) 56%, transparent 100%);
+  opacity: 1;
+  transform: perspective(900px) rotateX(16deg);
+  transform-origin: top center;
+}
+
 .home-background::after {
   position: absolute;
+  z-index: 1;
   inset: 0;
   content: '';
   background: linear-gradient(180deg, transparent 30%, var(--itlib-canvas) 100%);
@@ -139,4 +159,3 @@
     inset 0 24px 64px rgb(182 217 252 / 8%),
     0 24px 60px rgb(0 0 0 / 42%);
 }
-
