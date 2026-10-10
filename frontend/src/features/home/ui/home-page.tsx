@@ -1,7 +1,7 @@
 import { HomeBackground } from './home-background'
 import { HomeHeader } from './home-header'
 import { HomeHero } from './home-hero'
-import { CarouselDemo } from './home-featured'
+import { Featured } from './home-featured'
 
 export function HomePage() {
   return (
@@ -9,7 +9,7 @@ export function HomePage() {
       <HomeBackground />
       <HomeHeader />
       <HomeHero />
-      <CarouselDemo />
+      <Featured />
     </main>
   )
 }
