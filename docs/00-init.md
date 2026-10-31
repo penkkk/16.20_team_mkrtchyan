@@ -7,4 +7,6 @@
 [Use-Case](./text/07-use-case.md)\
 [C4](./text/08-c4.md)\
 [Трассируемость требований](./text/09-requirements-traceability.md)
+[Журнал изменений](./text/10-changelog.md)
+
 
