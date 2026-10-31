@@ -3,6 +3,9 @@
 *.swp
 .DS_Store
 .env
+infra/garage/garage.toml
+infra/garage/meta/
+infra/garage/data/
 
 # Go
 backend/bin/
