@@ -102,7 +102,56 @@ services:
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
+  garage:
+    image: dxflrs/garage:v2.5.0
+    command:
+      - /garage
+      - server
+      - --single-node
+      - --default-bucket
+    env_file:
+      - ./infra/garage/.env
+    volumes:
+      - ./infra/garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.garage.rule=Host(`s3.localhost`)"
+      - "traefik.http.routers.garage.entrypoints=web"
+      - "traefik.http.routers.garage.priority=200"
+      - "traefik.http.routers.garage.service=garage-s3"
+      - "traefik.http.services.garage-s3.loadbalancer.server.port=3900"
+    restart: unless-stopped
+    
+  garage-webui:
+    image: khairul169/garage-webui:1.1.0
+    restart: unless-stopped
+
+    depends_on:
+      - garage
+
+    volumes:
+      - ./infra/garage/garage.toml:/etc/garage.toml:ro
+
+    env_file:
+      - ./infra/garage/webui/.env
+
+    environment:
+      API_BASE_URL: "http://garage:3903"
+      S3_ENDPOINT_URL: "http://garage:3900"
+      S3_REGION: "garage"
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.garage-webui.rule=Host(`garage.localhost`)"
+      - "traefik.http.routers.garage-webui.entrypoints=web"
+      - "traefik.http.routers.garage-webui.priority=200"
+      - "traefik.http.routers.garage-webui.service=garage-webui"
+      - "traefik.http.services.garage-webui.loadbalancer.server.port=3909"
 
 volumes:
   postgres18_data:
   redis_data:
+  garage_data:
+  garage_meta:
