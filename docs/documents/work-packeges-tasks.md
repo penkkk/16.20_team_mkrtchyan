@@ -1,4 +1,24 @@
 # Задачи по компонентам и пакетам работ
 
+
 | Код | Задача | Пакет/компонент | Исполнитель | Часы | Зависит от |
 |-----|--------|-----------------|-------------|------|------------|
+| UI-01 | Подготовить приложение React, TypeScript и Vite с Bun, настроить сборку, пути импорта и базовую конфигурацию ESLint (`frontend/package.json`, `vite.config.ts`, `eslint.config.js`). | UI: основа SPA | Петров Артём (FS4) | — | — |
+| UI-02 | Создать общие компоненты интерфейса, цветовые токены и стили для страниц (`src/components/ui`, `src/styles/tokens.css`, `src/index.css`). | UI: общие компоненты | Петров Артём (FS4) | — | UI-01 |
+| UI-03 | Настроить маршруты главной, входа, регистрации и заготовки профиля, подключить TanStack Router и React Query (`src/routes`, `src/main.tsx`, `src/app/providers`). | UI: навигация | Петров Артём (FS4) | — | UI-01 |
+| UI-04 | Сверстать страницу входа с полями логина и пароля, состоянием отправки и выводом ошибок (`src/features/auth/ui/login-page.tsx`). | UI: авторизация, M-1 / TR_01 | Петров Артём (FS4) | — | UI-02, UI-03 |
+| UI-05 | Сверстать страницу регистрации и настроить проверку полей через React Hook Form и Zod (`src/features/auth/ui/register-page.tsx`, `src/features/auth/model/auth-schemas.ts`). | UI: регистрация, M-1 / TR_01 | Петров Артём (FS4) | — | UI-02, UI-03 |
+| UI-06 | Подключить формы к `/api/v1/auth/login` и `/api/v1/auth/register`, обработать ответы и ошибки, сохранять access token и переходить на страницу профиля (`src/features/auth/api/auth-api.ts`). | UI ↔ Backend: авторизация, M-1 / TR_01 | Петров Артём (FS4) | — | UI-04, UI-05; API Backend |
+| UI-07 | Добавить кнопки Google и Яндекс, формировать URL начала OAuth-сценария и переходить к backend (`src/features/auth/ui`, `src/features/auth/api/auth-api.ts`). | UI ↔ Backend: начало OAuth, S-3 / TR_02 | Петров Артём (FS4) | — | UI-04, UI-05; OAuth API Backend |
+| UI-08 | Создать главную страницу с шапкой, первым экраном, поисковой формой и ссылками на популярные темы (`src/features/home/ui/home-*.tsx`). Поиск пока передаёт запрос на `/catalog`; страницу каталога эта задача не включает. | UI: главная и вход в поиск, M-3 / TR_04 (интерфейс) | Петров Артём (FS4) | — | UI-02, UI-03 |
+| UI-09 | Добавить карусель «Популярные книги» со статическим списком и обложками (`src/features/home/ui/home-featured.tsx`). Динамический топ за неделю пока не реализован. | UI: блок подборки на главной, S-2 / TR_03 (макет) | Петров Артём (FS4) | — | UI-08 |
+| OPS-01 | Создать репозиторий проекта на GitHub, настроить защиту `main` с внесением изменений через pull request и добавить участников команды. | Инфраструктура: репозиторий и совместная работа | Петров Артём (FS4) | — | — |
+| OPS-02 | Собрать frontend в многоэтапном Docker-образе (Bun → Nginx), исключить локальные зависимости из контекста сборки и настроить Nginx для маршрутов SPA (`frontend/Dockerfile`, `.dockerignore`, `nginx.conf`). | UI: контейнер и раздача SPA | Петров Артём (FS4) | — | OPS-01, UI-01, UI-03 |
+| OPS-03 | Доработать Dockerfile backend: сборка Go-приложения в отдельном этапе, компактный runtime-образ и запуск без root (`backend/Dockerfile`). | Backend: контейнер приложения | Петров Артём (FS4) | — | OPS-01 |
+| OPS-04 | Добавить начальный сервис PostgreSQL и постоянный том в `docker-compose.yml`; последующие переменные окружения, healthcheck и миграции внесены другими участниками. | Database: PostgreSQL | Петров Артём (FS4) | — | OPS-01 |
+| OPS-05 | Добавить Redis с постоянным томом и healthcheck, передать backend `REDIS_URL` и ожидание готовности Redis (`docker-compose.yml`). | Database: Redis ↔ Backend | Петров Артём (FS4) | — | OPS-04 |
+| OPS-06 | Настроить локальный HTTP reverse proxy на Traefik: Docker provider, маршрутизацию `/api` к backend и `/` к UI, проверочный сервис `whoami` (`docker-compose.yml`). | Инфраструктура: доступ к UI и Backend | Петров Артём (FS4) | — | OPS-02, OPS-03 |
+| OPS-07 | Добавить Garage S3 в Compose: одноузловой запуск, тома данных и метаданных, маршрут `s3.localhost`, примеры переменных и `garage.toml` (`docker-compose.yml`, `infra/garage`). | Bucket: Garage S3 | Петров Артём (FS4) | — | OPS-06 |
+| OPS-08 | Добавить web-интерфейс администрирования Garage, соединение с S3 и admin API, маршрут `garage.localhost` и пример настройки доступа (`docker-compose.yml`, `infra/garage/webui/.env.example`). | Bucket: администрирование Garage | Петров Артём (FS4) | — | OPS-07 |
+| OPS-09 | Настроить GitHub Actions для ESLint frontend и golangci-lint backend при push и pull request в `main` (`.github/workflows/linters.yml`). | Инфраструктура: CI-проверки UI и Backend | Петров Артём (FS4) | — | OPS-01, UI-01, OPS-03 |
+| OPS-10 | Добавить сканирование файлов репозитория на критические и высокие уязвимости через Trivy в GitHub Actions (`.github/workflows/security_scanner.yml`). | Инфраструктура: проверка зависимостей и конфигурации | Петров Артём (FS4) | — | OPS-09 |
