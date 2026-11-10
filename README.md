@@ -24,5 +24,8 @@ docker compose --env-file backend/.env up -d --build
 ```
 ### Проверка
 ```bash
+docker compose --env-file backend/.env ps --all
 curl http://whoami.localhost
+curl -fsS http://localhost/ping
+curl -fsS -o /dev/null http://localhost/
 ```
