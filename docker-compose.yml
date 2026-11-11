@@ -76,7 +76,6 @@ services:
       - "traefik.http.routers.backend.priority=100"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
     env_file:
-      - .env
       - ./backend/.env
     environment:
       APP_PORT: ${APP_PORT:-8080}
@@ -90,6 +89,8 @@ services:
         condition: service_healthy
       redis: 
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   frontend:
