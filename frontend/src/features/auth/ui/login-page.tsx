@@ -6,7 +6,6 @@ import {
   BookOpenText,
   LockKeyhole,
   Mail,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -62,11 +61,7 @@ export function LoginPage() {
     <AuthLayout>
       <section className="grid w-full max-w-5xl items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
         <div className="hidden max-w-xl lg:block">
-          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-sm text-muted-foreground">
-            <Sparkles className="size-4 text-(--itlib-ice)" aria-hidden="true" />
-            ITLib
-          </div>
-          <h1 className="glass-heading max-w-lg text-5xl leading-tight font-medium">
+          <h1 className="pixel-heading max-w-lg text-5xl leading-tight font-medium">
             Библиотека с IT книгами для учебы и командной работы.
           </h1>
           <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">
@@ -74,10 +69,10 @@ export function LoginPage() {
           </p>
         </div>
 
-        <div className="glass-auth-card w-full max-w-[460px] justify-self-end rounded-2xl border p-6 text-card-foreground sm:p-8">
+        <div className="pixel-panel w-full max-w-[460px] justify-self-end rounded-2xl border p-6 text-card-foreground sm:p-8">
           <div className="mb-8 flex items-center gap-3">
             <div className="grid size-11 place-items-center rounded-xl border border-border bg-muted">
-              <BookOpenText className="size-5 text-(--itlib-ice)" aria-hidden="true" />
+              <BookOpenText className="size-5 text-(--itlib-icon-color)" aria-hidden="true" />
             </div>
             <div>
               <p className="text-sm font-medium tracking-[0.14em] text-muted-foreground uppercase">
