@@ -1,14 +1,59 @@
 import { HeroSearch } from "./home-hero-search";
 import { ArrowDown } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 const quickTopics = ['React', 'Python', 'DevOps', 'Алгоритмы', 'Базы данных']
+const headingText = 'Ваша библиотека знаний в мире IT'
+const headingCharacters = Array.from(headingText)
+
+function TypewriterHeading() {
+  const [visibleCount, setVisibleCount] = useState(() =>
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? headingCharacters.length
+      : 0,
+  )
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const showFullHeading = () => {
+      if (motionPreference.matches) setVisibleCount(headingCharacters.length)
+    }
+
+    motionPreference.addEventListener('change', showFullHeading)
+    return () => motionPreference.removeEventListener('change', showFullHeading)
+  }, [])
+
+  useEffect(() => {
+    if (
+      visibleCount >= headingCharacters.length ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) return
+
+    const timeout = window.setTimeout(
+      () => setVisibleCount(visibleCount + 1),
+      visibleCount === 0 ? 250 : 125,
+    )
+    return () => window.clearTimeout(timeout)
+  }, [visibleCount])
+
+  return (
+    <h1
+      aria-label={headingText}
+      className="pixel-heading relative max-w-5xl text-balance text-5xl leading-[1.35] font-medium sm:text-5xl lg:text-7xl"
+    >
+      <span aria-hidden="true" className="invisible block">{headingText}</span>
+      <span aria-hidden="true" className="absolute inset-0 block">
+        {headingCharacters.slice(0, visibleCount).join('')}
+        {visibleCount < headingCharacters.length ? <span className="typewriter-caret" /> : null}
+      </span>
+    </h1>
+  )
+}
 
 export function HomeHero() {
   return (
     <section className="relative z-10 mx-auto flex min-h-svh max-w-6xl flex-col items-center justify-center px-6 pb-24 pt-28 text-center sm:px-10">
-      <h1 className="glass-heading max-w-5xl text-balance text-5xl leading-[0.98] font-medium sm:text-6xl lg:text-7xl">
-        Ваша библиотека знаний в мире IT
-      </h1>
+      <TypewriterHeading />
       <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">
         Находите книги, авторов и технологии для учёбы и командной работы
       </p>
@@ -19,7 +64,7 @@ export function HomeHero() {
         </span>
         {quickTopics.map((topic) => (
           <a
-            className="rounded-full border border-border bg-muted/70 px-3 py-1.5 text-sm text-foreground transition-colors hover:border-primary/60 hover:bg-primary/15"
+            className="pixel-button border border-border bg-muted px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-accent"
             href={`/catalog?${new URLSearchParams({ q: topic }).toString()}`}
             key={topic}
           >
@@ -28,7 +73,7 @@ export function HomeHero() {
         ))}
       </div>
       <a
-        className="group mt-12 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group mt-12 inline-flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         href="#featured"
       >
         Популярные книги

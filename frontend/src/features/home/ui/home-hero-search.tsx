@@ -13,7 +13,7 @@ export function HeroSearch() {
       className="mx-auto mt-8 flex w-full max-w-2xl flex-col gap-3 sm:flex-row justify-center"
       method="get"
     >  
-    <InputGroup className="h-12 rounded-3xl glass-header outline-0" >
+    <InputGroup className="h-12 pixel-frame outline-0" >
       <InputGroupInput placeholder="Искать книгу..." name='q' className='ml-1'/>
       <InputGroupAddon>
         <Search />

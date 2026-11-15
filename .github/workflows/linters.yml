@@ -1,4 +1,4 @@
-name: Linters
+name: Checks
 
 on:
   push:
@@ -7,6 +7,46 @@ on:
     branches: [ "main" ]
 
 jobs:
+  backend-build:
+    name: Build backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'backend/go.mod'
+          cache-dependency-path: 'backend/go.sum'
+
+      - name: Build backend
+        run: go build -o "$RUNNER_TEMP/library" ./cmd/library
+
+  frontend-build:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        run: bun run build
+
   golangci-lint:
     name: GolangCI-Lint
     runs-on: ubuntu-latest

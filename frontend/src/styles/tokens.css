@@ -1,66 +1,88 @@
 :root {
+  color-scheme: light;
+
+  /* Bastille-8, ordered from darkest to lightest. */
+  --bastille-1: #181923;
+  --bastille-2: #292d41;
+  --bastille-3: #38405d;
+  --bastille-4: #4c546d;
+  --bastille-5: #6f687a;
+  --bastille-6: #8b7983;
+  --bastille-7: #a58d89;
+  --bastille-8: #b59e90;
+
+  /* Component roles. */
+  --itlib-page-background: var(--bastille-8);
+  --itlib-panel-background: var(--bastille-8);
+  --itlib-secondary-background: var(--bastille-7);
+  --itlib-muted-background: var(--bastille-7);
+  --itlib-hover-background: var(--bastille-6);
+  --itlib-text-primary: var(--bastille-1);
+  --itlib-text-muted: var(--bastille-3);
+  --itlib-action-background: var(--bastille-3);
+  --itlib-action-foreground: var(--bastille-8);
+  --itlib-icon-color: var(--bastille-2);
+  --itlib-border-color: var(--bastille-4);
+  --itlib-focus-color: var(--bastille-3);
+  --itlib-error-color: var(--bastille-2);
+  --itlib-grid-color: var(--bastille-7);
+  --itlib-shadow-color: var(--bastille-5);
+  --itlib-font-ui: 'GNF', 'Geist Variable', sans-serif;
+  --itlib-font-display: 'GNF', 'Geist Variable', sans-serif;
+
+  /* shadcn aliases share the same component roles. */
+  --background: var(--itlib-page-background);
+  --foreground: var(--itlib-text-primary);
+  --card: var(--itlib-panel-background);
+  --card-foreground: var(--itlib-text-primary);
+  --popover: var(--itlib-page-background);
+  --popover-foreground: var(--itlib-text-primary);
+  --primary: var(--itlib-action-background);
+  --primary-foreground: var(--itlib-action-foreground);
+  --secondary: var(--itlib-secondary-background);
+  --secondary-foreground: var(--itlib-text-primary);
+  --muted: var(--itlib-muted-background);
+  --muted-foreground: var(--itlib-text-muted);
+  --accent: var(--itlib-hover-background);
+  --accent-foreground: var(--itlib-text-primary);
+  --destructive: var(--itlib-error-color);
+  --border: var(--itlib-border-color);
+  --input: var(--itlib-panel-background);
+  --ring: var(--itlib-focus-color);
+  --chart-1: var(--itlib-action-background);
+  --chart-2: var(--bastille-4);
+  --chart-3: var(--bastille-5);
+  --chart-4: var(--bastille-6);
+  --chart-5: var(--bastille-7);
+  --sidebar: var(--itlib-page-background);
+  --sidebar-foreground: var(--itlib-text-primary);
+  --sidebar-primary: var(--itlib-action-background);
+  --sidebar-primary-foreground: var(--itlib-action-foreground);
+  --sidebar-accent: var(--itlib-muted-background);
+  --sidebar-accent-foreground: var(--itlib-text-primary);
+  --sidebar-border: var(--itlib-border-color);
+  --sidebar-ring: var(--itlib-focus-color);
+  --radius: 0;
+}
+
+:root.dark {
   color-scheme: dark;
-
-  /* ITLib */
-  --itlib-canvas: #05060f;
-  --itlib-steel: #2f343e;
-  --itlib-fog: #9da7ba;
-  --itlib-moon-mist: #c7d3ea;
-  --itlib-frost-glow: #d1e4fa;
-  --itlib-ice: #d8ecf8;
-  --itlib-violet: #1687ea;
-  --itlib-ambient-violet: #25175c;
-  --itlib-glass-edge: rgb(186 215 247 / 12%);
-  --itlib-luminous-fill: rgb(199 211 234 / 12%);
-  --itlib-glass-card-shadow:
-    inset 0 1px 1px rgb(216 236 248 / 20%),
-    inset 0 24px 48px rgb(168 216 245 / 6%),
-    0 16px 32px rgb(0 0 0 / 30%);
-  --itlib-font-ui: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-  --itlib-font-display: var(--itlib-font-ui);
-
-  /* shadcn  */
-  --background: var(--itlib-canvas);
-  --foreground: var(--itlib-frost-glow);
-  --card: rgb(5 6 15 / 97%);
-  --card-foreground: #ffffff;
-  --popover: var(--itlib-canvas);
-  --popover-foreground: var(--itlib-frost-glow);
-  --primary: var(--itlib-violet);
-  --primary-foreground: #ffffff;
-  --secondary: var(--itlib-steel);
-  --secondary-foreground: var(--itlib-frost-glow);
-  --muted: rgb(199 211 234 / 6%);
-  --muted-foreground: var(--itlib-moon-mist);
-  --accent: rgb(186 214 247 / 6%);
-  --accent-foreground: #ffffff;
-  --destructive: #e46d4c;
-  --border: var(--itlib-glass-edge);
-  --input: rgb(199 211 234 / 6%);
-  --ring: #98c0ef;
-  --chart-1: var(--itlib-violet);
-  --chart-2: #027dea;
-  --chart-3: #269684;
-  --chart-4: #b6d9fc;
-  --chart-5: #e46d4c;
-  --sidebar: var(--itlib-canvas);
-  --sidebar-foreground: var(--itlib-frost-glow);
-  --sidebar-primary: var(--itlib-violet);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgb(186 214 247 / 6%);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: var(--itlib-glass-edge);
-  --sidebar-ring: #98c0ef;
-  --radius: 0.5rem;
-
-  /* auth */
-  --itlib-auth-glass-bg: rgb(5 6 15 / 48%);
-  backdrop-filter: blur(28px) saturate(160%);
-  --itlib-auth-glass-border: rgb(216 236 248 / 18%);
-  --itlib-auth-glass-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 22%),
-    inset 0 24px 64px rgb(216 236 248 / 7%),
-    0 24px 60px rgb(0 0 0 / 42%);
+  --itlib-page-background: var(--bastille-1);
+  --itlib-panel-background: var(--bastille-2);
+  --itlib-secondary-background: var(--bastille-3);
+  --itlib-muted-background: var(--bastille-2);
+  --itlib-hover-background: var(--bastille-3);
+  --itlib-text-primary: var(--bastille-8);
+  --itlib-text-muted: var(--bastille-7);
+  --itlib-action-background: var(--bastille-7);
+  --itlib-action-foreground: var(--bastille-1);
+  --itlib-icon-color: var(--bastille-8);
+  --itlib-border-color: var(--bastille-5);
+  --itlib-focus-color: var(--bastille-7);
+  --itlib-error-color: var(--bastille-8);
+  --itlib-grid-color: var(--bastille-2);
+  --itlib-shadow-color: var(--bastille-4);
+  --sidebar-accent: var(--itlib-hover-background);
 }
 
 @theme inline {
