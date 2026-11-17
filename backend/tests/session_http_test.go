@@ -40,6 +40,7 @@ func sessionRequest(t *testing.T, service *sessionService, method, path string, 
 	request := httptest.NewRequest(method, path, nil)
 	request.Header.Set("Authorization", "Bearer access-token")
 	if cookie {
+		// #nosec G124 -- This is an incoming test request cookie, not a Set-Cookie response.
 		request.AddCookie(&http.Cookie{Name: "refresh_token", Value: "old-refresh"})
 	}
 	response := httptest.NewRecorder()

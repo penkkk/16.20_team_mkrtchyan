@@ -49,6 +49,7 @@ func oauthRequest(t *testing.T, service *oauthHTTPService, method, path, body, c
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "browser")
 	if cookieName != "" {
+		// #nosec G124 -- This is an incoming test request cookie, not a Set-Cookie response.
 		request.AddCookie(&http.Cookie{Name: cookieName, Value: "saved-token"})
 	}
 	response := httptest.NewRecorder()
