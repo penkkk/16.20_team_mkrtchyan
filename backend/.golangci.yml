@@ -28,6 +28,15 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      - path: '(^|/)tests/.*_test\.go$'
+        linters:
+          - goconst
+          - gocyclo
+      - path: '(^|/)tests/.*_test\.go$'
+        linters:
+          - govet
+        text: '^(fieldalignment|shadow):'
     paths:
       - third_party$
       - builtin$
