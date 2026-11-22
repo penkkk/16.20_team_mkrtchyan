@@ -1,8 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { BookOpenText, Menu, Bell } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import ButtonWithIconDemo from '@/components/ui/button-with-icon'
+import { useQuery } from '@tanstack/react-query'
+import { BookOpenText, LibraryBig, Bell, ArrowUpRight } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { currentUserQueryKey, getCurrentUser } from '@/features/auth/api/auth-api'
+import { cn } from '@/lib/utils'
 
 
 const navigationItems = [
@@ -12,6 +14,8 @@ const navigationItems = [
 ]
 
 export function HomeHeader() {
+  const userQuery = useQuery({ queryKey: currentUserQueryKey, queryFn: getCurrentUser, retry: false })
+
   return (
     <header className="absolute inset-x-0 top-0 z-20 mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6">
       <div className="pixel-frame flex min-h-14 items-center justify-between gap-3 px-3 sm:min-h-16 sm:px-5">
@@ -38,6 +42,12 @@ export function HomeHeader() {
         </nav>
 
         <div className="flex items-center gap-1.5">
+          <Link
+            className="hidden px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+            to="/admin"
+          >
+            Админка · демо
+          </Link>
           <Button
             aria-label="Уведомления"
             className="hidden text-muted-foreground hover:text-foreground sm:inline-flex"
@@ -49,19 +59,19 @@ export function HomeHeader() {
           </Button>
           <ThemeToggle />
           <Link
-            to="/login"
+            className={cn(buttonVariants(), 'h-10 gap-2 px-4 text-sm font-medium')}
+            to={userQuery.data ? '/profile' : '/login'}
           >
-            <ButtonWithIconDemo></ButtonWithIconDemo>
+            {userQuery.data ? 'Профиль' : 'Войти'}
+            <ArrowUpRight className="size-4" aria-hidden="true" />
           </Link>
-          <Button
-            aria-label="Открыть меню"
-            className="text-muted-foreground hover:text-foreground md:hidden"
-            size="icon"
-            type="button"
-            variant="ghost"
+          <Link
+            aria-label="Админка, демо"
+            className="grid size-8 place-items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+            to="/admin"
           >
-            <Menu aria-hidden="true" />
-          </Button>
+            <LibraryBig aria-hidden="true" className="size-5" />
+          </Link>
         </div>
       </div>
     </header>

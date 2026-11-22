@@ -7,6 +7,14 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.FRONTEND_API_PROXY_TARGET ?? 'http://localhost',
+        changeOrigin: true,
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),

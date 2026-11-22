@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   BookOpenText,
@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { login, getOAuthStartUrl, persistAccessToken } from '@/features/auth/api/auth-api'
+import { login, getOAuthStartUrl, currentUserQueryKey } from '@/features/auth/api/auth-api'
 import { cn } from '@/lib/utils'
 import { AuthLayout } from './auth-layout'
 
@@ -26,13 +26,14 @@ const oauthProviders: Array<{
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [loginValue, setLoginValue] = useState('')
   const [password, setPassword] = useState('')
 
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (result) => {
-      persistAccessToken(result.accessToken)
+      queryClient.setQueryData(currentUserQueryKey, result.user)
       void navigate({ to: '/profile' })
     },
   })
