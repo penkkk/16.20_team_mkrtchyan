@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   AtSign,
@@ -17,7 +17,7 @@ import {
   type UseFormRegisterReturn,
 } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
-import { registerUser, persistAccessToken, type RegisterPayload, getOAuthStartUrl } from '@/features/auth/api/auth-api'
+import { registerUser, currentUserQueryKey, type RegisterPayload, getOAuthStartUrl } from '@/features/auth/api/auth-api'
 import { registerSchema, type RegisterFormValues } from '@/features/auth/model/auth-schemas'
 import { cn } from '@/lib/utils'
 import { AuthLayout } from './auth-layout'
@@ -35,6 +35,7 @@ const oauthProviders: Array<{
 ]
 
 export function RegisterPage() {
+  const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false);
 
   function handleOAuthRegister(provider: 'google' | 'yandex') {
@@ -59,7 +60,7 @@ export function RegisterPage() {
   const registerMutation = useMutation({
     mutationFn: registerUser,
     onSuccess: (result) => {
-      persistAccessToken(result.accessToken)
+      queryClient.setQueryData(currentUserQueryKey, result.user)
       void navigate({ to: '/profile' })
     },
   })
