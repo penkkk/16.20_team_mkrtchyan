@@ -7,6 +7,14 @@ import (
 )
 
 type Config struct {
+	S3AdminEndpoint         string
+	S3AdminToken            string
+	S3Endpoint              string
+	S3Region                string
+	S3AccessKey             string
+	S3SecretKey             string
+	S3BooksBucket           string
+	S3CoversBucket          string
 	HTTPPort                string
 	AppPublicURL            string
 	DataBaseURL             string
@@ -39,6 +47,14 @@ func Load() (Config, error) {
 	}
 
 	return Config{
+		S3AdminEndpoint:         envDefault("S3_ADMIN_ENDPOINT", "http://garage:3903"),
+		S3AdminToken:            os.Getenv("GARAGE_ADMIN_TOKEN"),
+		S3Endpoint:              envDefault("S3_ENDPOINT", "http://garage:3900"),
+		S3Region:                envDefault("S3_REGION", "garage"),
+		S3AccessKey:             os.Getenv("GARAGE_DEFAULT_ACCESS_KEY"),
+		S3SecretKey:             os.Getenv("GARAGE_DEFAULT_SECRET_KEY"),
+		S3BooksBucket:           envDefault("S3_BOOKS_BUCKET", "books"),
+		S3CoversBucket:          envDefault("S3_COVERS_BUCKET", "covers"),
 		HTTPPort:                httpPort,
 		AppPublicURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")), "/"),
 		DataBaseURL:             os.Getenv("DATABASE_URL"),
@@ -65,4 +81,11 @@ func JWTSecretsCheck(jwtSecret string, jwtIssuer string, jwtAudience string) err
 	}
 
 	return nil
+}
+
+func envDefault(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }

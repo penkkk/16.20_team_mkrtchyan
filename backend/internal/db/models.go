@@ -40,6 +40,7 @@ type AuthUser struct {
 	Surname    pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
+	Role       string
 }
 
 type AuthUserPassword struct {

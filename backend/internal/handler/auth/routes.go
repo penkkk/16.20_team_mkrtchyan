@@ -16,4 +16,5 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup, authRequired gin.Handl
 	auth.GET("/:provider/callback", h.oauthCallback)
 	auth.GET("/:provider/link/start", authRequired, h.linkExternal)
 	auth.POST("/password", authRequired, h.addPassword)
+
 }
