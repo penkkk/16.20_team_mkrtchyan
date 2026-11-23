@@ -17,22 +17,26 @@ func TestBootstrapCreatesMissingBucketAndGrantsAccess(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/v2/ListBuckets":
-			json.NewEncoder(w).Encode([]any{map[string]any{"id": "books-id", "globalAliases": []string{"books"}}})
+			if err := json.NewEncoder(w).Encode([]any{map[string]any{"id": "books-id", "globalAliases": []string{"books"}}}); err != nil {
+				t.Error(err)
+			}
 		case "/v2/CreateBucket":
 			var request map[string]string
-			json.NewDecoder(r.Body).Decode(&request)
+			decodeRequest(t, r, &request)
 			if request["globalAlias"] != "covers" {
 				t.Errorf("unexpected bucket: %v", request)
 			}
 			created++
-			json.NewEncoder(w).Encode(map[string]string{"id": "covers-id"})
+			if err := json.NewEncoder(w).Encode(map[string]string{"id": "covers-id"}); err != nil {
+				t.Error(err)
+			}
 		case "/v2/AllowBucketKey":
 			var request struct {
+				Permissions map[string]bool `json:"permissions"`
 				AccessKeyID string          `json:"accessKeyId"`
 				BucketID    string          `json:"bucketId"`
-				Permissions map[string]bool `json:"permissions"`
 			}
-			json.NewDecoder(r.Body).Decode(&request)
+			decodeRequest(t, r, &request)
 			if request.AccessKeyID != "key" || !request.Permissions["read"] || !request.Permissions["write"] {
 				t.Errorf("unexpected grant: %+v", request)
 			}
@@ -47,5 +51,12 @@ func TestBootstrapCreatesMissingBucketAndGrantsAccess(t *testing.T) {
 	}
 	if created != 1 || !granted["books-id"] || !granted["covers-id"] {
 		t.Fatalf("created %d; grants %v", created, granted)
+	}
+}
+
+func decodeRequest(t *testing.T, r *http.Request, dst any) {
+	t.Helper()
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		t.Error(err)
 	}
 }

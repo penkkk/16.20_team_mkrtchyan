@@ -12,12 +12,16 @@ import (
 	bookrepo "opd/internal/repository/book"
 )
 
+const testBooksBucket = "books"
+const testCoversBucket = "covers"
+const testPDFType = "application/pdf"
+
 type fakeStorage struct {
 	puts             []string
 	deletes          []string
-	keys             []string
 	failBucket       string
 	deleteFailBucket string
+	keys             []string
 }
 
 func (s *fakeStorage) Put(_ context.Context, bucket, key, contentType string, body io.ReadSeeker, size int64) error {
@@ -48,15 +52,15 @@ func (s *fakeStorage) Delete(ctx context.Context, bucket, key string) error {
 }
 
 type fakeRepository struct {
+	listBooks   []bookrepo.Book
 	stored      bookrepo.StoredBook
+	input       bookrepo.CreateInput
 	getErr      error
 	deleteErr   error
-	deleteCalls int
-	listInput   bookrepo.ListInput
-	listBooks   []bookrepo.Book
-	input       bookrepo.CreateInput
-	calls       int
 	err         error
+	listInput   bookrepo.ListInput
+	deleteCalls int
+	calls       int
 }
 
 func (r *fakeRepository) Create(_ context.Context, input bookrepo.CreateInput) (string, error) {
@@ -77,17 +81,17 @@ func TestUpload(t *testing.T) {
 		calls      int
 		wantErr    bool
 	}{
-		{name: "success", puts: []string{"books", "covers"}, calls: 1},
-		{name: "book upload fails", failBucket: "books", puts: []string{"books"}, wantErr: true},
-		{name: "cover upload fails", failBucket: "covers", puts: []string{"books", "covers"}, deletes: []string{"books"}, wantErr: true},
-		{name: "database fails", dbErr: errors.New("db error"), puts: []string{"books", "covers"}, deletes: []string{"books", "covers"}, calls: 1, wantErr: true},
+		{name: "success", puts: []string{testBooksBucket, testCoversBucket}, calls: 1},
+		{name: "book upload fails", failBucket: testBooksBucket, puts: []string{testBooksBucket}, wantErr: true},
+		{name: "cover upload fails", failBucket: testCoversBucket, puts: []string{testBooksBucket, testCoversBucket}, deletes: []string{testBooksBucket}, wantErr: true},
+		{name: "database fails", dbErr: errors.New("db error"), puts: []string{testBooksBucket, testCoversBucket}, deletes: []string{testBooksBucket, testCoversBucket}, calls: 1, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := &fakeStorage{failBucket: tt.failBucket}
 			repo := &fakeRepository{err: tt.dbErr}
-			service := NewBookService(repo, storage, "books", "covers")
-			input := UploadInput{Title: "Go", Author: "Author", Description: "Description", AccessLevel: "free", Level: "beginner", Topic: "Go", Book: File{Body: bytes.NewReader([]byte("book")), Size: 4, ContentType: "application/pdf"}, Cover: File{Body: bytes.NewReader([]byte("cover")), Size: 5, ContentType: "image/png"}}
+			service := NewBookService(repo, storage, testBooksBucket, testCoversBucket)
+			input := UploadInput{Title: "Go", Author: "Author", Description: "Description", AccessLevel: "free", Level: "beginner", Topic: "Go", Book: File{Body: bytes.NewReader([]byte("book")), Size: 4, ContentType: testPDFType}, Cover: File{Body: bytes.NewReader([]byte("cover")), Size: 5, ContentType: "image/png"}}
 			result, err := service.Upload(context.Background(), input)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("unexpected error: %v", err)
@@ -100,7 +104,7 @@ func TestUpload(t *testing.T) {
 					t.Fatalf("inconsistent object keys: %v", storage.keys)
 				}
 			}
-			if !tt.wantErr && (result.ID != "book-id" || result.Title != input.Title || result.BookKey != result.CoverKey || result.BookKey != repo.input.BookKey || repo.input.CoverKey != result.BookKey || repo.input.AccessLevel != input.AccessLevel) {
+			if !tt.wantErr && !uploadResultMatches(result, input, repo.input) {
 				t.Fatalf("unexpected result %+v or repository input %+v", result, repo.input)
 			}
 		})
@@ -114,7 +118,7 @@ func (r *fakeRepository) List(_ context.Context, input bookrepo.ListInput) ([]bo
 
 func TestListPagination(t *testing.T) {
 	repo := &fakeRepository{listBooks: []bookrepo.Book{{ID: "1"}, {ID: "2"}, {ID: "3"}}}
-	service := NewBookService(repo, &fakeStorage{}, "books", "covers")
+	service := NewBookService(repo, &fakeStorage{}, testBooksBucket, testCoversBucket)
 	result, err := service.List(context.Background(), ListInput{Limit: 2, Offset: 4, Search: "go", Topic: "Go"})
 	if err != nil || len(result.Books) != 2 || !result.HasMore {
 		t.Fatalf("result: %+v, error: %v", result, err)
@@ -132,7 +136,7 @@ func (r *fakeRepository) Delete(_ context.Context, _ string) error {
 	return r.deleteErr
 }
 func (s *fakeStorage) Get(_ context.Context, bucket, key string) (io.ReadCloser, string, int64, error) {
-	return io.NopCloser(bytes.NewReader([]byte("book"))), "application/pdf", 4, nil
+	return io.NopCloser(bytes.NewReader([]byte("book"))), testPDFType, 4, nil
 }
 
 func TestDeleteBook(t *testing.T) {
@@ -140,19 +144,19 @@ func TestDeleteBook(t *testing.T) {
 		name    string
 		fail    string
 		dbErr   error
-		wantErr bool
 		deletes []string
 		calls   int
+		wantErr bool
 	}{
-		{name: "success", deletes: []string{"books", "covers"}, calls: 1},
-		{name: "book delete fails", fail: "books", wantErr: true, deletes: []string{"books"}},
-		{name: "cover delete fails", fail: "covers", wantErr: true, deletes: []string{"books", "covers"}},
-		{name: "database delete fails", dbErr: errors.New("db"), wantErr: true, deletes: []string{"books", "covers"}, calls: 1},
+		{name: "success", deletes: []string{testBooksBucket, testCoversBucket}, calls: 1},
+		{name: "book delete fails", fail: testBooksBucket, wantErr: true, deletes: []string{testBooksBucket}},
+		{name: "cover delete fails", fail: testCoversBucket, wantErr: true, deletes: []string{testBooksBucket, testCoversBucket}},
+		{name: "database delete fails", dbErr: errors.New("db"), wantErr: true, deletes: []string{testBooksBucket, testCoversBucket}, calls: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fakeRepository{stored: bookrepo.StoredBook{BookKey: "bk", CoverKey: "ck"}, deleteErr: tt.dbErr}
 			storage := &fakeStorage{deleteFailBucket: tt.fail}
-			err := NewBookService(repo, storage, "books", "covers").Delete(context.Background(), "id")
+			err := NewBookService(repo, storage, testBooksBucket, testCoversBucket).Delete(context.Background(), "id")
 			if (err != nil) != tt.wantErr || !reflect.DeepEqual(storage.deletes, tt.deletes) || repo.deleteCalls != tt.calls {
 				t.Fatalf("err: %v, deletes: %v, db calls: %d", err, storage.deletes, repo.deleteCalls)
 			}
@@ -162,13 +166,17 @@ func TestDeleteBook(t *testing.T) {
 
 func TestDownloadBook(t *testing.T) {
 	repo := &fakeRepository{stored: bookrepo.StoredBook{Title: "Go", BookFilename: "go.pdf", BookKey: "key"}}
-	result, err := NewBookService(repo, &fakeStorage{}, "books", "covers").Download(context.Background(), "id")
+	result, err := NewBookService(repo, &fakeStorage{}, testBooksBucket, testCoversBucket).Download(context.Background(), "id")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer result.Body.Close()
 	data, err := io.ReadAll(result.Body)
-	if err != nil || string(data) != "book" || result.Filename != "go.pdf" || result.ContentType != "application/pdf" {
+	if err != nil || string(data) != "book" || result.Filename != "go.pdf" || result.ContentType != testPDFType {
 		t.Fatalf("result: %+v; body: %q; err: %v", result, data, err)
 	}
+}
+
+func uploadResultMatches(result UploadResult, input UploadInput, saved bookrepo.CreateInput) bool {
+	return result.ID == "book-id" && result.Title == input.Title && result.BookKey == result.CoverKey && result.BookKey == saved.BookKey && saved.CoverKey == result.BookKey && saved.AccessLevel == input.AccessLevel
 }

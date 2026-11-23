@@ -9,15 +9,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	bookservice "opd/internal/service/book"
+
+	"github.com/gin-gonic/gin"
 )
 
 type fakeService struct {
-	input       bookservice.ListInput
 	uploadInput bookservice.UploadInput
 	bookBytes   []byte
 	coverBytes  []byte
+	input       bookservice.ListInput
 	calls       int
 }
 
@@ -86,7 +87,7 @@ func TestListRoute(t *testing.T) {
 func (s *fakeService) Delete(context.Context, string) error { s.calls++; return nil }
 func (s *fakeService) Download(context.Context, string) (bookservice.DownloadResult, error) {
 	s.calls++
-	return bookservice.DownloadResult{Body: io.NopCloser(strings.NewReader("content")), ContentType: "application/pdf", Size: 7, Filename: "example.pdf"}, nil
+	return bookservice.DownloadResult{Body: io.NopCloser(strings.NewReader("content")), ContentType: pdfMIME, Size: 7, Filename: "example.pdf"}, nil
 }
 
 func TestBookActions(t *testing.T) {
@@ -98,11 +99,11 @@ func TestBookActions(t *testing.T) {
 		status       int
 		calls        int
 	}{
-		{"GET", "/books/" + id + "/download", false, 200, 1},
-		{"DELETE", "/books/" + id, false, 204, 1},
-		{"GET", "/books/invalid/download", false, 400, 0},
-		{"DELETE", "/books/" + id, true, 403, 0},
-		{"GET", "/books/" + id + "/download", true, 403, 0},
+		{http.MethodGet, "/books/" + id + "/download", false, 200, 1},
+		{http.MethodDelete, "/books/" + id, false, 204, 1},
+		{http.MethodGet, "/books/invalid/download", false, 400, 0},
+		{http.MethodDelete, "/books/" + id, true, 403, 0},
+		{http.MethodGet, "/books/" + id + "/download", true, 403, 0},
 	} {
 		svc := &fakeService{}
 		router := gin.New()
@@ -120,7 +121,7 @@ func TestBookActions(t *testing.T) {
 		if w.Code != tt.status || svc.calls != tt.calls {
 			t.Fatalf("%s %s: status %d, calls %d", tt.method, tt.path, w.Code, svc.calls)
 		}
-		if tt.method == "GET" && tt.status == 200 && (w.Body.String() != "content" || !strings.Contains(w.Header().Get("Content-Disposition"), "example.pdf")) {
+		if tt.method == http.MethodGet && tt.status == 200 && (w.Body.String() != "content" || !strings.Contains(w.Header().Get("Content-Disposition"), "example.pdf")) {
 			t.Fatalf("bad download response: %v %q", w.Header(), w.Body.String())
 		}
 	}

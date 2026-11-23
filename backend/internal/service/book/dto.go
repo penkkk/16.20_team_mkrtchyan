@@ -3,10 +3,10 @@ package book
 import "io"
 
 type File struct {
-	Filename    string
 	Body        io.ReadSeeker
-	Size        int64
+	Filename    string
 	ContentType string
+	Size        int64
 }
 
 type UploadInput struct {
@@ -33,10 +33,10 @@ type UploadResult struct {
 }
 
 type ListInput struct {
-	Limit  int
-	Offset int
 	Search string
 	Topic  string
+	Limit  int
+	Offset int
 }
 
 type Book struct {
@@ -57,7 +57,7 @@ type ListResult struct {
 type DownloadResult struct {
 	Body        io.ReadCloser
 	ContentType string
-	Size        int64
 	Filename    string
 	Title       string
+	Size        int64
 }

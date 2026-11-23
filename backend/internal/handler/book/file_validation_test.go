@@ -25,8 +25,8 @@ func makeEPUB(t *testing.T, valid bool) []byte {
 	if !valid {
 		kind = "application/not-epub"
 	}
-	if _, err := w.Write([]byte(kind)); err != nil {
-		t.Fatal(err)
+	if _, writeErr := w.Write([]byte(kind)); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	w, err = zw.Create("META-INF/container.xml")
 	if err != nil {
@@ -50,17 +50,17 @@ func TestUploadChecksContent(t *testing.T) {
 	webp := []byte("RIFF\x10\x00\x00\x00WEBPVP8 more-data")
 	for _, tt := range []struct {
 		name                string
+		bookType, coverType string
 		book, cover         []byte
 		status              int
-		bookType, coverType string
 	}{
-		{"pdf and png", pdf, png, 201, "application/pdf", "image/png"},
-		{"epub and jpeg", epub, jpeg, 201, "application/epub+zip", "image/jpeg"},
-		{"pdf and webp", pdf, webp, 201, "application/pdf", "image/webp"},
-		{"fake pdf", []byte("not a pdf"), png, 400, "", ""},
-		{"zip without epub mime", makeEPUB(t, false), png, 400, "", ""},
-		{"truncated epub", epub[:len(epub)/2], png, 400, "", ""},
-		{"fake cover", pdf, []byte("not an image"), 400, "", ""},
+		{"pdf and png", pdfMIME, "image/png", pdf, png, 201},
+		{"epub and jpeg", "application/epub+zip", "image/jpeg", epub, jpeg, 201},
+		{"pdf and webp", pdfMIME, "image/webp", pdf, webp, 201},
+		{"fake pdf", "", "", []byte("not a pdf"), png, 400},
+		{"zip without epub mime", "", "", makeEPUB(t, false), png, 400},
+		{"truncated epub", "", "", epub[:len(epub)/2], png, 400},
+		{"fake cover", "", "", pdf, []byte("not an image"), 400},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var body bytes.Buffer
@@ -102,9 +102,13 @@ func TestUploadChecksContent(t *testing.T) {
 			if tt.status == 400 && svc.calls != 0 {
 				t.Fatalf("invalid upload reached service")
 			}
-			if tt.status == 201 && (svc.calls != 1 || svc.uploadInput.Book.ContentType != tt.bookType || svc.uploadInput.Cover.ContentType != tt.coverType || !bytes.Equal(svc.bookBytes, tt.book) || !bytes.Equal(svc.coverBytes, tt.cover)) {
+			if tt.status == 201 && !uploadMatches(svc, tt.book, tt.cover, tt.bookType, tt.coverType) {
 				t.Fatalf("invalid file data or content types: %+v", svc.uploadInput)
 			}
 		})
 	}
+}
+
+func uploadMatches(svc *fakeService, book, cover []byte, bookType, coverType string) bool {
+	return svc.calls == 1 && svc.uploadInput.Book.ContentType == bookType && svc.uploadInput.Cover.ContentType == coverType && bytes.Equal(svc.bookBytes, book) && bytes.Equal(svc.coverBytes, cover)
 }

@@ -8,17 +8,23 @@ import (
 	"net/http"
 )
 
+const pdfMIME = "application/pdf"
+
 var errUnsupportedFile = errors.New("unsupported or invalid file type")
 
 func validateBook(file io.ReaderAt, size int64) (string, error) {
 	header := make([]byte, 5)
 	if _, err := file.ReadAt(header, 0); err == nil && bytes.Equal(header, []byte("%PDF-")) {
-		return "application/pdf", nil
+		return pdfMIME, nil
 	}
 	archive, err := zip.NewReader(file, size)
 	if err != nil {
 		return "", errUnsupportedFile
 	}
+	return validateEPUB(archive)
+}
+
+func validateEPUB(archive *zip.Reader) (string, error) {
 	var mimetype *zip.File
 	hasContainer := false
 	for _, entry := range archive.File {

@@ -16,30 +16,7 @@ func BootstrapBuckets(ctx context.Context, endpoint, token, key string, names ..
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	call := func(method, path string, body any, out any) error {
-		var b bytes.Buffer
-		if body != nil {
-			if err := json.NewEncoder(&b).Encode(body); err != nil {
-				return err
-			}
-		}
-		req, err := http.NewRequestWithContext(ctx, method, endpoint+path, &b)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Content-Type", "application/json")
-		res, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer res.Body.Close()
-		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return fmt.Errorf("garage admin %s: %s", path, res.Status)
-		}
-		if out != nil {
-			return json.NewDecoder(res.Body).Decode(out)
-		}
-		return nil
+		return callGarage(ctx, client, endpoint, token, method, path, body, out)
 	}
 	var buckets []struct {
 		ID      string   `json:"id"`
@@ -73,6 +50,33 @@ func BootstrapBuckets(ctx context.Context, endpoint, token, key string, names ..
 		if err := call("POST", "/v2/AllowBucketKey", permissions, nil); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func callGarage(ctx context.Context, client *http.Client, endpoint, token, method, path string, body, out any) error {
+	var b bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&b).Encode(body); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, method, endpoint+path, &b)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return fmt.Errorf("garage admin %s: %s", path, res.Status)
+	}
+	if out != nil {
+		return json.NewDecoder(res.Body).Decode(out)
 	}
 	return nil
 }

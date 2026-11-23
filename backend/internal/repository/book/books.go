@@ -26,10 +26,10 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateInput) (str
 }
 
 type ListInput struct {
-	Limit  int
-	Offset int
 	Search string
 	Topic  string
+	Limit  int
+	Offset int
 }
 
 type Book struct {

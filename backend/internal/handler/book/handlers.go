@@ -16,16 +16,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const maxUploadSize = 100 << 20
+const (
+	maxUploadSize = 100 << 20
+	errorKey      = "error"
+	uploadFailed  = "upload failed"
+)
 
 func (h *Handler) upload(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadSize)
 	if err := c.Request.ParseMultipartForm(8 << 20); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart form or upload exceeds 100 MiB"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid multipart form or upload exceeds 100 MiB"})
 		return
 	}
 	if c.Request.MultipartForm != nil {
-		defer c.Request.MultipartForm.RemoveAll()
+		defer func() {
+			if err := c.Request.MultipartForm.RemoveAll(); err != nil {
+				log.Printf("remove multipart files: %v", err)
+			}
+		}()
 	}
 	req := UploadRequest{
 		Title:       strings.TrimSpace(c.PostForm("title")),
@@ -38,42 +46,42 @@ func (h *Handler) upload(c *gin.Context) {
 	title, author := req.Title, req.Author
 	description, topic := req.Description, req.Topic
 	access, level := req.AccessLevel, req.Level
-	if title == "" || author == "" || description == "" || topic == "" || (access != "free" && access != "subscription") || (level != "beginner" && level != "intermediate" && level != "advanced") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "title, author, description, topic, valid access_level and level are required"})
+	if !validUploadRequest(req) {
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "title, author, description, topic, valid access_level and level are required"})
 		return
 	}
 	bookFile, err := c.FormFile("book")
 	if err != nil || bookFile.Size == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "book file is required"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "book file is required"})
 		return
 	}
 	coverFile, err := c.FormFile("cover")
 	if err != nil || coverFile.Size == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cover file is required"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "cover file is required"})
 		return
 	}
 	bookBody, err := bookFile.Open()
 	if err != nil {
 		log.Printf("open book: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: uploadFailed})
 		return
 	}
 	defer bookBody.Close()
 	coverBody, err := coverFile.Open()
 	if err != nil {
 		log.Printf("open cover: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: uploadFailed})
 		return
 	}
 	defer coverBody.Close()
 	bookType, err := validateBook(bookBody, bookFile.Size)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "book must be a PDF or EPUB file"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "book must be a PDF or EPUB file"})
 		return
 	}
 	coverType, err := validateCover(coverBody, coverFile.Size)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cover must be a PNG, JPEG or WebP image"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "cover must be a PNG, JPEG or WebP image"})
 		return
 	}
 	result, err := h.service.Upload(c.Request.Context(), bookservice.UploadInput{
@@ -83,7 +91,7 @@ func (h *Handler) upload(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("upload book: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: uploadFailed})
 		return
 	}
 	c.JSON(http.StatusCreated, UploadResponse{
@@ -99,21 +107,21 @@ func (h *Handler) list(c *gin.Context) {
 	if raw := c.Query("limit"); raw != "" {
 		limit, err = strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 100 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be between 1 and 100"})
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "limit must be between 1 and 100"})
 			return
 		}
 	}
 	if raw := c.Query("offset"); raw != "" {
 		offset, err = strconv.Atoi(raw)
 		if err != nil || offset < 0 || offset > 2147483647 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset"})
+			c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid offset"})
 			return
 		}
 	}
 	result, err := h.service.List(c.Request.Context(), bookservice.ListInput{Limit: limit, Offset: offset, Search: strings.TrimSpace(c.Query("search")), Topic: strings.TrimSpace(c.Query("topic"))})
 	if err != nil {
 		log.Printf("list books: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load books"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "could not load books"})
 		return
 	}
 	books := make([]BookResponse, 0, len(result.Books))
@@ -128,7 +136,7 @@ var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[
 func (h *Handler) download(c *gin.Context) {
 	id := c.Param("id")
 	if !uuidPattern.MatchString(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid book id"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid book id"})
 		return
 	}
 	result, err := h.service.Download(c.Request.Context(), id)
@@ -162,7 +170,7 @@ func (h *Handler) download(c *gin.Context) {
 func (h *Handler) delete(c *gin.Context) {
 	id := c.Param("id")
 	if !uuidPattern.MatchString(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid book id"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid book id"})
 		return
 	}
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
@@ -174,11 +182,11 @@ func (h *Handler) delete(c *gin.Context) {
 
 func respondBookError(c *gin.Context, err error) {
 	if errors.Is(err, bookrepo.ErrNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "book not found"})
+		c.JSON(http.StatusNotFound, gin.H{errorKey: "book not found"})
 		return
 	}
 	log.Printf("book operation: %v", err)
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "book operation failed"})
+	c.JSON(http.StatusInternalServerError, gin.H{errorKey: "book operation failed"})
 }
 
 func safeFilename(name string) string {
@@ -194,4 +202,10 @@ func safeFilename(name string) string {
 		return ""
 	}
 	return name
+}
+
+func validUploadRequest(req UploadRequest) bool {
+	return req.Title != "" && req.Author != "" && req.Description != "" && req.Topic != "" &&
+		(req.AccessLevel == "free" || req.AccessLevel == "subscription") &&
+		(req.Level == "beginner" || req.Level == "intermediate" || req.Level == "advanced")
 }
