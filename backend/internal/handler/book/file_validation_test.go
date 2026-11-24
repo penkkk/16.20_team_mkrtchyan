@@ -21,7 +21,7 @@ func makeEPUB(t *testing.T, valid bool) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kind := "application/epub+zip"
+	kind := epubMIME
 	if !valid {
 		kind = "application/not-epub"
 	}
@@ -55,7 +55,7 @@ func TestUploadChecksContent(t *testing.T) {
 		status              int
 	}{
 		{"pdf and png", pdfMIME, "image/png", pdf, png, 201},
-		{"epub and jpeg", "application/epub+zip", "image/jpeg", epub, jpeg, 201},
+		{"epub and jpeg", epubMIME, "image/jpeg", epub, jpeg, 201},
 		{"pdf and webp", pdfMIME, "image/webp", pdf, webp, 201},
 		{"fake pdf", "", "", []byte("not a pdf"), png, 400},
 		{"zip without epub mime", "", "", makeEPUB(t, false), png, 400},

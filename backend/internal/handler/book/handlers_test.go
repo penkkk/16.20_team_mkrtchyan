@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,11 +16,12 @@ import (
 )
 
 type fakeService struct {
-	uploadInput bookservice.UploadInput
-	bookBytes   []byte
-	coverBytes  []byte
-	input       bookservice.ListInput
-	calls       int
+	downloadTitle string
+	uploadInput   bookservice.UploadInput
+	bookBytes     []byte
+	coverBytes    []byte
+	input         bookservice.ListInput
+	calls         int
 }
 
 func (s *fakeService) Upload(_ context.Context, input bookservice.UploadInput) (bookservice.UploadResult, error) {
@@ -87,7 +89,11 @@ func TestListRoute(t *testing.T) {
 func (s *fakeService) Delete(context.Context, string) error { s.calls++; return nil }
 func (s *fakeService) Download(context.Context, string) (bookservice.DownloadResult, error) {
 	s.calls++
-	return bookservice.DownloadResult{Body: io.NopCloser(strings.NewReader("content")), ContentType: pdfMIME, Size: 7, Filename: "example.pdf"}, nil
+	title := s.downloadTitle
+	if title == "" {
+		title = "Example book"
+	}
+	return bookservice.DownloadResult{Body: io.NopCloser(strings.NewReader("content")), ContentType: pdfMIME, Size: 7, Filename: "example.pdf", Title: title}, nil
 }
 
 func TestBookActions(t *testing.T) {
@@ -121,8 +127,35 @@ func TestBookActions(t *testing.T) {
 		if w.Code != tt.status || svc.calls != tt.calls {
 			t.Fatalf("%s %s: status %d, calls %d", tt.method, tt.path, w.Code, svc.calls)
 		}
-		if tt.method == http.MethodGet && tt.status == 200 && (w.Body.String() != "content" || !strings.Contains(w.Header().Get("Content-Disposition"), "example.pdf")) {
+		if tt.method == http.MethodGet && tt.status == 200 && (w.Body.String() != "content" || !strings.Contains(w.Header().Get("Content-Disposition"), "Example book.pdf")) {
 			t.Fatalf("bad download response: %v %q", w.Header(), w.Body.String())
 		}
+	}
+}
+
+func TestDownloadFilename(t *testing.T) {
+	for _, tt := range []struct{ title, original, contentType, want string }{
+		{"Чистый код", "other.pdf", pdfMIME, "Чистый код.pdf"},
+		{"Go.epub", "old.epub", epubMIME, "Go.epub"},
+		{"Go / язык: основы", "original.pdf", "application/octet-stream", "Go _ язык_ основы.pdf"},
+		{"...", "", pdfMIME, "book.pdf"},
+		{"Go", "original.exe", "application/octet-stream", "Go"},
+	} {
+		if got := downloadFilename(tt.title, tt.original, tt.contentType); got != tt.want {
+			t.Errorf("downloadFilename(%q, %q, %q) = %q; want %q", tt.title, tt.original, tt.contentType, got, tt.want)
+		}
+	}
+}
+
+func TestDownloadUsesUnicodeBookTitle(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	pass := func(c *gin.Context) { c.Next() }
+	NewHandler(&fakeService{downloadTitle: "Чистый код"}).RegisterRoutes(router.Group("/api/v1"), pass, pass)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/admin/books/01234567-89ab-cdef-0123-456789abcdef/download", nil))
+	_, params, err := mime.ParseMediaType(response.Header().Get("Content-Disposition"))
+	if response.Code != http.StatusOK || err != nil || params["filename"] != "Чистый код.pdf" {
+		t.Fatalf("status %d, filename %q, error %v", response.Code, params["filename"], err)
 	}
 }

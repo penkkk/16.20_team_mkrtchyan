@@ -145,19 +145,7 @@ func (h *Handler) download(c *gin.Context) {
 		return
 	}
 	defer result.Body.Close()
-	filename := safeFilename(result.Filename)
-	if filename == "" {
-		filename = safeFilename(result.Title)
-		if filename == "" {
-			filename = "book"
-		}
-		switch strings.ToLower(strings.Split(result.ContentType, ";")[0]) {
-		case "application/pdf":
-			filename += ".pdf"
-		case "application/epub+zip":
-			filename += ".epub"
-		}
-	}
+	filename := downloadFilename(result.Title, result.Filename, result.ContentType)
 	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
 	if disposition == "" {
 		disposition = `attachment; filename="book"`
@@ -208,4 +196,33 @@ func validUploadRequest(req UploadRequest) bool {
 	return req.Title != "" && req.Author != "" && req.Description != "" && req.Topic != "" &&
 		(req.AccessLevel == "free" || req.AccessLevel == "subscription") &&
 		(req.Level == "beginner" || req.Level == "intermediate" || req.Level == "advanced")
+}
+
+func downloadFilename(title, original, contentType string) string {
+	name := strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 || strings.ContainsRune(`<>:"/\|?*`, r) {
+			return '_'
+		}
+		return r
+	}, title)
+	name = strings.Trim(strings.TrimSpace(name), ". ")
+	if name == "" {
+		name = "book"
+	}
+	var extension string
+	switch strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0])) {
+	case pdfMIME:
+		extension = ".pdf"
+	case epubMIME:
+		extension = ".epub"
+	default:
+		candidate := strings.ToLower(filepath.Ext(safeFilename(original)))
+		if candidate == ".pdf" || candidate == ".epub" {
+			extension = candidate
+		}
+	}
+	if extension != "" && !strings.HasSuffix(strings.ToLower(name), extension) {
+		name += extension
+	}
+	return name
 }

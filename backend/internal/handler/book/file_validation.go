@@ -8,7 +8,10 @@ import (
 	"net/http"
 )
 
-const pdfMIME = "application/pdf"
+const (
+	pdfMIME  = "application/pdf"
+	epubMIME = "application/epub+zip"
+)
 
 var errUnsupportedFile = errors.New("unsupported or invalid file type")
 
@@ -38,7 +41,6 @@ func validateEPUB(archive *zip.Reader) (string, error) {
 			hasContainer = true
 		}
 	}
-	const epubMIME = "application/epub+zip"
 	if mimetype == nil || mimetype.Method != zip.Store || mimetype.UncompressedSize64 != uint64(len(epubMIME)) || !hasContainer {
 		return "", errUnsupportedFile
 	}
