@@ -20,7 +20,8 @@ RETURNING
     name,
     surname,
     created_at,
-    updated_at;
+    updated_at,
+    role;
 
 -- name: CreateUserPassword :one
 INSERT INTO auth.user_passwords (
@@ -103,7 +104,8 @@ SELECT
     name,
     surname,
     created_at,
-    updated_at
+    updated_at,
+    role
 FROM auth.users
 WHERE id = sqlc.arg(id)
 LIMIT 1;
@@ -133,7 +135,8 @@ SELECT
     u.name,
     u.surname,
     u.created_at,
-    u.updated_at
+    u.updated_at,
+    u.role
 FROM auth.external_identities AS ei
 JOIN auth.users AS u ON u.id = ei.user_id
 WHERE ei.provider = $1
@@ -165,3 +168,15 @@ RETURNING
 SELECT user_id, password_hash
 FROM auth.user_passwords
 WHERE user_id = sqlc.arg(user_id);
+
+-- name: GetUserRoleByID :one
+SELECT role
+FROM auth.users
+WHERE id = sqlc.arg(user_id);
+
+-- name: UpdateUserRole :one
+UPDATE auth.users
+SET role = sqlc.arg(role),
+    updated_at = NOW()
+WHERE id = sqlc.arg(user_id)
+RETURNING role;

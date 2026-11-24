@@ -73,6 +73,30 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise
 }
 
+export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  let token = accessToken ?? await refreshAccessToken()
+  if (!token) throw new Error('Войдите в аккаунт администратора, чтобы загрузить книгу.')
+
+  const request = (currentToken: string) => {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${currentToken}`)
+    return fetch(`${API_BASE_URL}${path}`, { ...init, headers, credentials: 'include' })
+  }
+
+  let response = await request(token)
+  if (response.status === 401) {
+    if (accessToken === token) accessToken = null
+    token = accessToken ?? await refreshAccessToken()
+    if (!token) throw new Error('Сессия истекла. Войдите в аккаунт администратора.')
+    response = await request(token)
+  }
+  if (response.status === 401) {
+    if (accessToken === token) accessToken = null
+    throw new Error('Сессия истекла. Войдите в аккаунт администратора.')
+  }
+  return response
+}
+
 async function requestCurrentUser(token: string): Promise<Response> {
   return fetch(`${API_BASE_URL}/me`, {
     credentials: 'include',

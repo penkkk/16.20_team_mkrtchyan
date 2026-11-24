@@ -1,12 +1,15 @@
 package middleware
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 
 	"opd/internal/handler/apierror"
+	authrepo "opd/internal/repository/auth"
 	"opd/internal/service/token"
 
 	"github.com/gin-gonic/gin"
@@ -56,6 +59,36 @@ func AuthMiddleware(tokens token.Manager, redisClient *redis.Client) gin.Handler
 		}
 
 		c.Set(UserIDKey, claims.UserID)
+		c.Next()
+	}
+}
+
+type RoleReader interface {
+	GetUserRoleByID(ctx context.Context, input authrepo.GetRoleByUserID) (string, error)
+}
+
+// RequireAdmin must run after AuthMiddleware.
+func RequireAdmin(roles RoleReader) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetString(UserIDKey)
+		if userID == "" {
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
+			return
+		}
+
+		role, err := roles.GetUserRoleByID(c.Request.Context(), authrepo.GetRoleByUserID{UserID: userID})
+		if errors.Is(err, authrepo.ErrNotFound) {
+			apierror.Abort(c, http.StatusUnauthorized, "unauthorized", unauthorizedMsg)
+			return
+		}
+		if err != nil {
+			apierror.Abort(c, http.StatusInternalServerError, "internal_server_error", "internal server error")
+			return
+		}
+		if role != "admin" {
+			apierror.Abort(c, http.StatusForbidden, "forbidden", "forbidden")
+			return
+		}
 		c.Next()
 	}
 }

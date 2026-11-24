@@ -11,12 +11,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	authhandler "opd/internal/handler/auth"
 	"opd/internal/handler/middleware"
 	"opd/internal/repository"
+	authrepo "opd/internal/repository/auth"
 	authservice "opd/internal/service/auth"
 	"opd/internal/service/token"
 
@@ -51,12 +53,21 @@ func TestIntegrationAuthLifecycle(t *testing.T) {
 	if err := client.Ping(ctx).Err(); err != nil {
 		t.Fatal(err)
 	}
-	migration, err := os.ReadFile("../migrations/000001_create_users_and_refresh_sessions.up.sql")
+	migrations, err := filepath.Glob("../migrations/*.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, string(migration)); err != nil {
-		t.Fatalf("apply schema: %v", err)
+	if len(migrations) == 0 {
+		t.Fatal("no migrations found")
+	}
+	for _, path := range migrations {
+		migration, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, string(migration)); err != nil {
+			t.Fatalf("apply %s: %v", path, err)
+		}
 	}
 
 	manager := token.NewJWTManager("integration-secret", "opd-test", "opd-test", 15*time.Minute)
@@ -76,6 +87,10 @@ func TestIntegrationAuthLifecycle(t *testing.T) {
 			t.Errorf("delete test user: %v", err)
 		}
 	}()
+	role, err := repos.Auth.GetUserRoleByID(ctx, authrepo.GetRoleByUserID{UserID: registered.User.ID})
+	if err != nil || role != "user" {
+		t.Fatalf("default user role: role=%q, err=%v", role, err)
+	}
 	var passwordHash string
 	if err := pool.QueryRow(ctx, "SELECT password_hash FROM auth.user_passwords WHERE user_id = $1", registered.User.ID).Scan(&passwordHash); err != nil {
 		t.Fatalf("read stored password: %v", err)

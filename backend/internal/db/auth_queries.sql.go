@@ -138,7 +138,8 @@ RETURNING
     name,
     surname,
     created_at,
-    updated_at
+    updated_at,
+    role
 `
 
 type CreateUserParams struct {
@@ -167,6 +168,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AuthUse
 		&i.Surname,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
@@ -248,7 +250,8 @@ SELECT
     u.name,
     u.surname,
     u.created_at,
-    u.updated_at
+    u.updated_at,
+    u.role
 FROM auth.external_identities AS ei
 JOIN auth.users AS u ON u.id = ei.user_id
 WHERE ei.provider = $1
@@ -273,6 +276,7 @@ func (q *Queries) GetUserByExternalIdentity(ctx context.Context, arg GetUserByEx
 		&i.Surname,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
@@ -286,7 +290,8 @@ SELECT
     name,
     surname,
     created_at,
-    updated_at
+    updated_at,
+    role
 FROM auth.users
 WHERE id = $1
 LIMIT 1
@@ -304,6 +309,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (AuthUser, er
 		&i.Surname,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
@@ -373,6 +379,19 @@ func (q *Queries) GetUserPasswordByID(ctx context.Context, userID pgtype.UUID) (
 	return i, err
 }
 
+const getUserRoleByID = `-- name: GetUserRoleByID :one
+SELECT role
+FROM auth.users
+WHERE id = $1
+`
+
+func (q *Queries) GetUserRoleByID(ctx context.Context, userID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserRoleByID, userID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
+}
+
 const revokeActiveRefreshSessionsByUserAgent = `-- name: RevokeActiveRefreshSessionsByUserAgent :exec
 UPDATE auth.refresh_sessions
 SET revoked_at = NOW()
@@ -413,4 +432,24 @@ func (q *Queries) RevokeRefreshSession(ctx context.Context, tokenHash string) (R
 	var i RevokeRefreshSessionRow
 	err := row.Scan(&i.UserID, &i.UserAgent)
 	return i, err
+}
+
+const updateUserRole = `-- name: UpdateUserRole :one
+UPDATE auth.users
+SET role = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING role
+`
+
+type UpdateUserRoleParams struct {
+	Role   string
+	UserID pgtype.UUID
+}
+
+func (q *Queries) UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (string, error) {
+	row := q.db.QueryRow(ctx, updateUserRole, arg.Role, arg.UserID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
 }

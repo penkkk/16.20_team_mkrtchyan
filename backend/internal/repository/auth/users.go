@@ -109,6 +109,23 @@ func (r *AuthPostgresRepository) GetUserPasswordByID(ctx context.Context, input 
 	return nil
 }
 
+func (r *AuthPostgresRepository) GetUserRoleByID(ctx context.Context, input GetRoleByUserID) (string, error) {
+	userID, err := uuidFromString(input.UserID)
+	if err != nil {
+		return "", err
+	}
+
+	role, err := r.queries.GetUserRoleByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", err
+	}
+	return role, nil
+}
+
 func userUniqueConstraintFields(err error) []string {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != uniqueViolationCode {
