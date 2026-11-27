@@ -23,16 +23,16 @@
 
 ## Трассируемость приёмки Must
 
-Итерации задач взяты из [календарного плана](../documents/iteration-plan.md). Проверки запланированы на общий прогон MVP (QA-02) в итерации 7.
+Итерации задач взяты из [календарного плана](../documents/iteration-plan.md). Проверки запланированы на общий прогон MVP (QA-02) в итерации 6.
 
 | Требование | TR | Пакет WBS | Задачи | Проверка | Итерации задач | Итерация приёмки |
 |---|---|---|---|---|---|---|
-| M-1 | TR_01 | 1 | UI-05, UI-06, BE-05, BE-06 | [T-01](../documents/acceptance-test.md) | 1, 2, 3 | 7 |
-| M-2 | TR_05 | 2 | CAT-02, CAT-04 | [T-02](../documents/acceptance-test.md) | 4, 6 | 7 |
-| M-3 | TR_04 | 2 | CAT-03, CAT-04 | [T-03](../documents/acceptance-test.md) | 6 | 7 |
-| M-4 | TR_11 | 2 | CAT-02, CAT-05 | [T-04](../documents/acceptance-test.md) | 4 | 7 |
-| M-5 | TR_07 | 3 | SUB-02, SUB-04 | [T-05](../documents/acceptance-test.md) | 4 | 7 |
-| M-6 | TR_14 | 3 | SUB-01, SUB-03 | [T-06](../documents/acceptance-test.md) | 4 | 7 |
-| M-7 | TR_10 | 4 | ADM-01, ADM-02, ADM-03 | [T-07](../documents/acceptance-test.md) | 4, 5 | 7 |
-| M-8 | TR_15 | 5, 6 | INT-01, INT-02, INT-03, REP-01, REP-02 | [T-08](../documents/acceptance-test.md) | 4, 5, 6 | 7 |
-| M-9 | TR_16 | 7 | DATA-01, DATA-02 | [T-09](../documents/acceptance-test.md) | 5, 7 | 7 |
+| M-1 | TR_01 | 1 | UI-05, UI-06, BE-05, BE-06 | [T-01](../documents/acceptance-test.md) | 1, 2, 3 | 6 |
+| M-2 | TR_05 | 2 | CAT-02, CAT-04 | [T-02](../documents/acceptance-test.md) | 4, 5 | 6 |
+| M-3 | TR_04 | 2 | CAT-03, CAT-04 | [T-03](../documents/acceptance-test.md) | 5 | 6 |
+| M-4 | TR_11 | 2 | CAT-02, CAT-05 | [T-04](../documents/acceptance-test.md) | 4 | 6 |
+| M-5 | TR_07 | 3 | SUB-02, SUB-04 | [T-05](../documents/acceptance-test.md) | 4 | 6 |
+| M-6 | TR_14 | 3 | SUB-01, SUB-03 | [T-06](../documents/acceptance-test.md) | 4 | 6 |
+| M-7 | TR_10 | 4 | ADM-01, ADM-02, ADM-03 | [T-07](../documents/acceptance-test.md) | 4, 5 | 6 |
+| M-8 | TR_15 | 5, 6 | INT-01, INT-02, INT-03, REP-01, REP-02 | [T-08](../documents/acceptance-test.md) | 4, 5 | 6 |
+| M-9 | TR_16 | 7 | DATA-01, DATA-02 | [T-09](../documents/acceptance-test.md) | 5, 6 | 6 |
